@@ -463,7 +463,7 @@ class ActionCalculator:
     def _format_action_description(self, action_name: str, bindings: Dict[str, str]) -> str:
         """Create human-readable action description in PDDL format"""
         # Format as: action_name (param1, param2, param3)
-        # This will be parsed by _humanize_action in narrative_service
+        # This will be parsed by humanize_pddl_action function
         if bindings:
             params = ', '.join(bindings.values())
             return f"{action_name} ({params})"
