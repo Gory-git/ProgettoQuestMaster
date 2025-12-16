@@ -24,7 +24,7 @@ class PDDLValidationService:
         Validate PDDL domain and problem files
         
         Args:
-            domain_content: PDDL domain file content
+            domain_content:  PDDL domain file content
             problem_content: PDDL problem file content
             
         Returns:
@@ -35,17 +35,17 @@ class PDDLValidationService:
         # Basic syntax validation
         syntax_errors = self._validate_syntax(domain_content, problem_content)
         if syntax_errors:
-            errors.extend(syntax_errors)
+            errors. extend(syntax_errors)
         
         # Try Fast Downward validation if available
-        if self.fast_downward_path and os.path.exists(self.fast_downward_path):
+        if self.fast_downward_path and os.path.exists(self. fast_downward_path):
             fd_errors = self._validate_with_fast_downward(domain_content, problem_content)
             if fd_errors:
                 errors.extend(fd_errors)
         
         return len(errors) == 0, errors
     
-    def _validate_syntax(self, domain: str, problem: str) -> List[str]:
+    def _validate_syntax(self, domain:  str, problem: str) -> List[str]:
         """
         Basic PDDL syntax validation
         
@@ -53,7 +53,7 @@ class PDDLValidationService:
             domain: Domain file content
             problem: Problem file content
             
-        Returns:
+        Returns: 
             List of error messages
         """
         errors = []
@@ -62,22 +62,25 @@ class PDDLValidationService:
         if not domain.strip().startswith('(define'):
             errors.append("Domain file must start with '(define'")
         
-        if not re.search(r'\(domain\s+\w+\)', domain):
+        # Fixed regex:  allow alphanumeric, hyphens, and underscores
+        if not re.search(r'\(domain\s+[\w\-]+\)', domain):
             errors.append("Domain file must contain (domain <name>)")
         
         # Check problem structure
         if not problem.strip().startswith('(define'):
             errors.append("Problem file must start with '(define'")
         
-        if not re.search(r'\(problem\s+\w+\)', problem):
+        # Fixed regex: allow alphanumeric, hyphens, and underscores
+        if not re.search(r'\(problem\s+[\w\-]+\)', problem):
             errors.append("Problem file must contain (problem <name>)")
         
-        if not re.search(r'\(:domain\s+\w+\)', problem):
-            errors.append("Problem file must reference a domain with (:domain <name>)")
+        # Fixed regex: allow alphanumeric, hyphens, and underscores
+        if not re.search(r'\(:domain\s+[\w\-]+\)', problem):
+            errors. append("Problem file must reference a domain with (:domain <name>)")
         
         # Check parentheses balance
         if domain.count('(') != domain.count(')'):
-            errors.append("Unbalanced parentheses in domain file")
+            errors. append("Unbalanced parentheses in domain file")
         
         if problem.count('(') != problem.count(')'):
             errors.append("Unbalanced parentheses in problem file")
@@ -88,7 +91,7 @@ class PDDLValidationService:
         """
         Validate using Fast Downward planner
         
-        Args:
+        Args: 
             domain: Domain file content
             problem: Problem file content
             
@@ -99,11 +102,11 @@ class PDDLValidationService:
         
         try:
             # Create temporary files
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.pddl', delete=False) as domain_file:
+            with tempfile. NamedTemporaryFile(mode='w', suffix='.pddl', delete=False) as domain_file:
                 domain_file.write(domain)
-                domain_path = domain_file.name
+                domain_path = domain_file. name
             
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.pddl', delete=False) as problem_file:
+            with tempfile.NamedTemporaryFile(mode='w', suffix='. pddl', delete=False) as problem_file:
                 problem_file.write(problem)
                 problem_path = problem_file.name
             
@@ -138,7 +141,7 @@ class PDDLValidationService:
         
         return errors
     
-    def check_plan_exists(self, domain: str, problem: str) -> Tuple[bool, str]:
+    def check_plan_exists(self, domain:  str, problem: str) -> Tuple[bool, str]:
         """
         Check if a valid plan exists for the problem
         
@@ -152,7 +155,7 @@ class PDDLValidationService:
         if not self.fast_downward_path or not os.path.exists(self.fast_downward_path):
             return True, "Fast Downward not available - skipping plan validation"
         
-        try:
+        try: 
             # Create temporary files
             with tempfile.NamedTemporaryFile(mode='w', suffix='.pddl', delete=False) as domain_file:
                 domain_file.write(domain)
@@ -191,5 +194,5 @@ class PDDLValidationService:
             
         except subprocess.TimeoutExpired:
             return False, "Planning timeout - problem may be too difficult"
-        except Exception as e:
+        except Exception as e: 
             return False, f"Plan checking error: {str(e)}"
