@@ -1,4 +1,4 @@
-# QuestMaster - Quest Management System
+# QuestMaster - Interactive Story Generation System
 
 ![QuestMaster](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -10,13 +10,11 @@
 - [Features](#features)
 - [Project Architecture](#project-architecture)
 - [Prerequisites](#prerequisites)
-- [Setup Instructions](#setup-instructions)
-- [Configuration](#configuration)
-- [Usage](#usage)
+- [Quick Start](#quick-start)
+- [Detailed Setup](#detailed-setup)
+- [Usage Guide](#usage-guide)
 - [API Documentation](#api-documentation)
-- [Database Schema](#database-schema)
 - [Development](#development)
-- [Testing](#testing)
 - [Deployment](#deployment)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -26,143 +24,157 @@
 
 ## Overview
 
-**QuestMaster** is a comprehensive quest and task management system designed to streamline workflow management, goal tracking, and collaborative project execution. It provides users with tools to create, manage, prioritize, and monitor quests (tasks) with advanced filtering, progress tracking, and team collaboration features.
+**QuestMaster** is a comprehensive two-phase system for creating and experiencing interactive narrative adventures. It combines classical AI planning (PDDL) with modern Large Language Models (LLMs) to enable authors to create logically consistent, branching stories and players to experience dynamic, choice-driven narratives.
 
-The system is built with a modern architecture supporting scalability, security, and user-friendly interfaces.
+### Phase 1: Story Generation
+Authors create interactive stories by providing a lore document. The system uses GPT-4 to generate PDDL (Planning Domain Definition Language) files that model the adventure as a planning problem. A Reflection Agent assists with validation and refinement, ensuring logical consistency.
+
+### Phase 2: Interactive Play
+Players experience the stories through a web interface that dynamically generates narrative text and presents meaningful choices at each step. Optional DALL-E integration provides visual illustrations for each scene.
 
 ---
 
 ## Features
 
-### Core Features
+### Phase 1: Story Generation
 
-- **Quest Management**
-  - Create, edit, and delete quests
-  - Priority levels (Low, Medium, High, Critical)
-  - Status tracking (Open, In Progress, Completed, Blocked, On Hold)
-  - Due date management and deadline alerts
-  - Quest descriptions and detailed notes
+- **LLM-Powered PDDL Generation**
+  - Automatic generation of domain and problem files from lore
+  - Commented PDDL for clarity and understanding
+  - Customizable branching factors and story depth
 
-- **Task Organization**
-  - Category/Tag-based organization
-  - Hierarchical quest structure (parent-child relationships)
-  - Milestone-based planning
-  - Sprint management
+- **Intelligent Validation**
+  - Syntax validation for PDDL correctness
+  - Fast Downward integration for plan verification
+  - Real-time feedback on logical consistency
 
-- **Progress Tracking**
-  - Real-time progress indicators
-  - Completion percentage calculations
-  - Activity timeline and history
-  - Performance analytics and reporting
+- **Reflection Agent**
+  - AI-powered error analysis
+  - Specific suggestions for fixes
+  - Interactive chat interface for guidance
+  - Iterative refinement loop
 
-- **User Management**
-  - Role-based access control (Admin, Manager, User)
-  - User authentication and authorization
-  - Profile management
-  - Team assignment and collaboration
+- **Story Management**
+  - Create, edit, and organize stories
+  - Track validation status
+  - Version history for refinements
 
-- **Advanced Filtering & Search**
-  - Filter by status, priority, assignee, due date
-  - Full-text search functionality
-  - Saved filters and custom views
-  - Sorting options
+### Phase 2: Interactive Play
 
-- **Notifications & Alerts**
-  - Real-time notifications
-  - Email alerts for deadlines
-  - Activity updates
-  - Reminder system
+- **Dynamic Narrative Generation**
+  - Context-aware storytelling with GPT-4
+  - Immersive second-person narration
+  - Responsive to player choices
 
-- **Reporting & Analytics**
-  - Quest completion statistics
-  - Performance dashboards
-  - Timeline reports
-  - Team productivity metrics
+- **Action Selection**
+  - Dynamically generated choices from PDDL state
+  - Clear action descriptions
+  - Branching paths based on decisions
+
+- **Visual Enhancement**
+  - Optional DALL-E image generation
+  - Scene-specific illustrations
+  - Atmospheric visual storytelling
+
+- **Session Management**
+  - Save and resume game sessions
+  - Track action and narrative history
+  - Progress tracking
 
 ---
 
 ## Project Architecture
 
-### Architecture Overview
+### High-Level Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                        Frontend Layer                        │
-│              (React/Vue + UI Components)                     │
+│                        Frontend (React)                      │
+│              Material-UI + React Router                      │
 └────────────────────┬────────────────────────────────────────┘
-                     │
+                     │ HTTP/REST
 ┌────────────────────▼────────────────────────────────────────┐
-│                     API Gateway                              │
-│            (Request Routing & Authentication)               │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                    Backend Services                          │
+│                    Backend (Flask API)                       │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │Quest Service │  │User Service  │  │Report Service│      │
+│  │PDDL Service  │  │Reflection Svc│  │Narrative Svc │      │
 │  └──────────────┘  └──────────────┘  └──────────────┘      │
 └────────────────────┬────────────────────────────────────────┘
                      │
 ┌────────────────────▼────────────────────────────────────────┐
-│                   Data Access Layer                          │
-│              (ORM & Database Queries)                        │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-┌────────────────────▼────────────────────────────────────────┐
-│                     Database Layer                           │
-│         (PostgreSQL/MySQL + Data Persistence)               │
+│                   External Services                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │  OpenAI API  │  │Fast Downward │  │  Database    │      │
+│  │  (GPT-4)     │  │  (PDDL)      │  │  (SQLite/    │      │
+│  │  (DALL-E)    │  │              │  │  PostgreSQL) │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### Technology Stack
 
-| Component | Technology |
-|-----------|-----------|
-| **Frontend** | React.js / Vue.js |
-| **Backend** | Node.js / Python (Flask/Django) |
-| **Database** | PostgreSQL / MySQL |
-| **API** | RESTful API / GraphQL |
-| **Authentication** | JWT / OAuth 2.0 |
-| **Caching** | Redis |
-| **Message Queue** | RabbitMQ / Kafka |
-| **Containerization** | Docker |
-| **Orchestration** | Kubernetes |
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| **Frontend** | React.js 18 | UI framework with hooks |
+| **UI Library** | Material-UI (MUI) | Component library |
+| **Routing** | React Router 6 | Client-side routing |
+| **Build Tool** | Vite | Fast development and builds |
+| **Backend** | Flask 3.0 | Python web framework |
+| **Database** | SQLite / PostgreSQL | Data persistence |
+| **ORM** | SQLAlchemy | Database abstraction |
+| **LLM** | OpenAI GPT-4 | Story and PDDL generation |
+| **Image Gen** | DALL-E 3 | Scene illustrations |
+| **Planner** | Fast Downward | PDDL validation |
+| **Containerization** | Docker | Deployment packaging |
 
 ### Directory Structure
 
 ```
 ProgettoQuestMaster/
-├── frontend/                   # Frontend application
-│   ├── public/
-│   ├── src/
-│   │   ├── components/        # React/Vue components
-│   │   ├── pages/             # Page components
-│   │   ├── services/          # API service calls
-│   │   ├── store/             # State management
-│   │   └── styles/            # CSS/SCSS files
-│   └── package.json
-├── backend/                    # Backend API server
+├── backend/                    # Flask backend application
 │   ├── app/
-│   │   ├── controllers/       # Request handlers
-│   │   ├── models/            # Data models
+│   │   ├── __init__.py        # App factory
+│   │   ├── models/            # SQLAlchemy models
+│   │   │   └── story.py       # Story, RefinementHistory, GameSession
 │   │   ├── services/          # Business logic
-│   │   ├── middleware/        # Custom middleware
-│   │   └── routes/            # API routes
-│   ├── config/                # Configuration files
-│   ├── migrations/            # Database migrations
-│   ├── tests/                 # Unit & integration tests
-│   └── requirements.txt
-├── database/                  # Database scripts
-│   ├── schema/
-│   └── seeds/
-├── docker/                    # Docker files
-│   ├── Dockerfile
-│   └── docker-compose.yml
+│   │   │   ├── pddl_service.py        # PDDL generation
+│   │   │   ├── validation_service.py  # PDDL validation
+│   │   │   ├── reflection_service.py  # Reflection agent
+│   │   │   └── narrative_service.py   # Narrative generation
+│   │   └── routes/            # API endpoints
+│   │       ├── story_routes.py        # Phase 1 endpoints
+│   │       ├── game_routes.py         # Phase 2 endpoints
+│   │       └── health_routes.py       # Health checks
+│   ├── config/                # Configuration
+│   ├── requirements.txt       # Python dependencies
+│   ├── .env.example           # Environment template
+│   └── run.py                 # Application entry point
+├── frontend/                   # React frontend application
+│   ├── src/
+│   │   ├── components/        # Reusable components
+│   │   ├── pages/             # Page components
+│   │   │   ├── HomePage.jsx
+│   │   │   ├── StoryListPage.jsx
+│   │   │   ├── StoryCreationPage.jsx
+│   │   │   ├── StoryDetailPage.jsx
+│   │   │   └── GamePlayPage.jsx
+│   │   ├── services/          # API client
+│   │   │   └── api.js
+│   │   ├── App.jsx            # Root component
+│   │   └── main.jsx           # Entry point
+│   ├── package.json           # Node dependencies
+│   ├── vite.config.js         # Vite configuration
+│   └── .env.example           # Environment template
+├── docker/                    # Docker configuration
+│   ├── docker-compose.yml
+│   ├── Dockerfile.backend
+│   └── Dockerfile.frontend
 ├── docs/                      # Documentation
-│   ├── API.md
-│   ├── ARCHITECTURE.md
-│   └── DEPLOYMENT.md
-└── README.md
+│   ├── SETUP.md              # Setup guide
+│   ├── API.md                # API documentation
+│   └── ARCHITECTURE.md       # Architecture details
+├── setup.sh                   # Automated setup script
+├── .gitignore                # Git ignore rules
+└── README.md                 # This file
 ```
 
 ---
@@ -171,432 +183,310 @@ ProgettoQuestMaster/
 
 Before getting started, ensure you have the following installed:
 
-- **Node.js** v14+ or **Python** 3.8+
-- **npm** v6+ or **pip** 3+
-- **Docker** v20+ (optional, for containerized setup)
-- **PostgreSQL** v12+ or **MySQL** v8+
+- **Python 3.8+** (for backend)
+- **Node.js 14+** and npm (for frontend)
+- **OpenAI API Key** (required for GPT-4 and DALL-E)
+- **Fast Downward** (optional, for PDDL validation)
 - **Git** for version control
-- **Postman** or similar tool for API testing (optional)
 
-### Optional Tools
+### OpenAI API Access
+You'll need an OpenAI API key with access to:
+- GPT-4 (for PDDL and narrative generation)
+- DALL-E 3 (optional, for image generation)
 
-- **Redis** for caching
-- **Docker Compose** for multi-container orchestration
-- **VS Code** or your preferred IDE
+Get your API key at: https://platform.openai.com/api-keys
 
 ---
 
-## Setup Instructions
+## Quick Start
 
-### 1. Clone the Repository
+Use the automated setup script:
 
 ```bash
+# Clone the repository
 git clone https://github.com/Gory-git/ProgettoQuestMaster.git
 cd ProgettoQuestMaster
-```
 
-### 2. Backend Setup (Node.js/Express)
+# Run setup script
+chmod +x setup.sh
+./setup.sh
 
-```bash
+# Edit backend/.env and add your OPENAI_API_KEY
+
+# Start backend (Terminal 1)
 cd backend
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+python run.py
 
-# Install dependencies
-npm install
-
-# Create environment configuration file
-cp .env.example .env
-
-# Edit .env with your settings
-nano .env
-
-# Run database migrations
-npm run migrate
-
-# Start the backend server
-npm start
-```
-
-#### Backend .env Template
-
-```env
-NODE_ENV=development
-PORT=5000
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=questmaster
-DB_USER=postgres
-DB_PASSWORD=your_password
-JWT_SECRET=your_jwt_secret_key
-REDIS_URL=redis://localhost:6379
-API_BASE_URL=http://localhost:5000
-LOG_LEVEL=debug
-```
-
-### 3. Frontend Setup (React)
-
-```bash
+# Start frontend (Terminal 2)
 cd frontend
-
-# Install dependencies
-npm install
-
-# Create environment configuration file
-cp .env.example .env
-
-# Edit .env with your settings
-nano .env
-
-# Start the development server
-npm start
-```
-
-#### Frontend .env Template
-
-```env
-REACT_APP_API_URL=http://localhost:5000/api
-REACT_APP_API_TIMEOUT=30000
-REACT_APP_ENV=development
-```
-
-### 4. Database Setup
-
-#### Option A: Using PostgreSQL
-
-```bash
-# Create database
-psql -U postgres -c "CREATE DATABASE questmaster;"
-
-# Run migrations from backend directory
-npm run migrate
-
-# Seed initial data (optional)
-npm run seed
-```
-
-#### Option B: Using Docker
-
-```bash
-# Build and start all services
-docker-compose up -d
-
-# Run migrations
-docker-compose exec backend npm run migrate
-
-# Seed initial data
-docker-compose exec backend npm run seed
-```
-
-### 5. Verify Installation
-
-```bash
-# Test backend
-curl http://localhost:5000/api/health
-
-# Test frontend
-# Navigate to http://localhost:3000 in your browser
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-The application uses environment variables for configuration. Key variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NODE_ENV` | Environment mode (development/production/test) | development |
-| `PORT` | Backend server port | 5000 |
-| `DB_HOST` | Database host | localhost |
-| `DB_PORT` | Database port | 5432 |
-| `JWT_SECRET` | Secret key for JWT tokens | - |
-| `REDIS_URL` | Redis connection URL | redis://localhost:6379 |
-| `LOG_LEVEL` | Logging level (debug/info/warn/error) | info |
-
-### Database Configuration
-
-Database configuration is managed in `backend/config/database.js`:
-
-```javascript
-module.exports = {
-  development: {
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    database: process.env.DB_NAME,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-  },
-  // ... other environments
-};
-```
-
----
-
-## Usage
-
-### Running the Application
-
-#### Development Mode
-
-```bash
-# Terminal 1: Start backend
-cd backend
 npm run dev
-
-# Terminal 2: Start frontend
-cd frontend
-npm start
 ```
 
-#### Production Mode
+Visit **http://localhost:3000** to use the application.
+
+---
+
+## Detailed Setup
+
+### Backend Setup (Python/Flask)
 
 ```bash
-# Build frontend
-cd frontend
-npm run build
-
-# Start backend with production settings
 cd backend
-NODE_ENV=production npm start
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Edit .env and add your OPENAI_API_KEY
+
+# Run the backend
+python run.py
 ```
 
-### Key Operations
+Backend will run on **http://localhost:5000**
 
-#### Create a New Quest
+#### Backend Environment Variables (.env)
 
-1. Navigate to Dashboard
-2. Click "New Quest" button
-3. Fill in quest details:
-   - Title (required)
-   - Description
-   - Priority level
-   - Due date
-   - Assignee
-   - Categories/Tags
-4. Click "Create"
+```env
+# Flask Configuration
+FLASK_ENV=development
+SECRET_KEY=your_secret_key_here
 
-#### Filter and Search Quests
+# Database
+DATABASE_URL=sqlite:///questmaster.db
 
-- Use the sidebar filters for quick filtering
-- Use the search bar for full-text search
-- Combine multiple filters for advanced search
+# OpenAI API
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4
+OPENAI_TEMPERATURE=0.7
 
-#### Track Progress
+# DALL-E (Optional)
+DALLE_ENABLED=False
+DALLE_MODEL=dall-e-3
 
-- View quest status in the quest list
-- Click on a quest to view detailed progress
-- Update progress percentage in quest details
+# Fast Downward (Optional)
+FAST_DOWNWARD_PATH=/path/to/fast-downward
+```
+
+### Frontend Setup (React)
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.example .env
+
+# Start development server
+npm run dev
+```
+
+Frontend will run on **http://localhost:3000**
+
+#### Frontend Environment Variables (.env)
+
+```env
+VITE_API_URL=http://localhost:5000/api
+```
+
+### Docker Setup (Optional)
+
+For containerized deployment:
+
+```bash
+# Start all services
+docker-compose -f docker/docker-compose.yml up -d
+
+# View logs
+docker-compose -f docker/docker-compose.yml logs -f
+
+# Stop services
+docker-compose -f docker/docker-compose.yml down
+```
+
+---
+
+## Usage Guide
+
+### Creating Your First Story
+
+1. **Visit the Application**
+   - Open http://localhost:3000
+   - Click "Create Story" or navigate to `/create`
+
+2. **Enter Story Details**
+   - **Title**: Give your story a memorable name
+   - **Description**: Brief summary (optional)
+   - **Lore Content**: Describe your story world:
+     - Initial state (where does it begin?)
+     - Goal (what must be achieved?)
+     - Obstacles and challenges
+     - Characters, locations, items
+
+3. **Set Constraints**
+   - **Branching Factor**: Min/max actions per step (e.g., 2-4)
+   - **Depth**: Min/max steps to complete (e.g., 3-10)
+
+4. **Generate PDDL**
+   - Click "Generate PDDL"
+   - Wait for GPT-4 to create domain and problem files
+   - Review the generated PDDL with comments
+
+5. **Validate**
+   - Click "Validate PDDL"
+   - If errors occur:
+     - Review Reflection Agent's analysis
+     - Chat with agent for guidance
+     - Use "Auto-Fix" or manually refine
+     - Re-validate
+
+6. **Play Your Story**
+   - Once validated, click "Play Story"
+   - Make choices and experience your creation!
+
+### Playing an Interactive Story
+
+1. **Browse Stories**
+   - Navigate to "Stories" page
+   - View all validated stories
+
+2. **Start a Game**
+   - Click "Play" on any validated story
+   - Read the opening narrative
+
+3. **Make Choices**
+   - Read the current situation
+   - View available actions
+   - Click an action to proceed
+
+4. **Complete the Quest**
+   - Progress through the story
+   - Each choice affects the narrative
+   - Reach the goal to complete
+
+### Using the Reflection Agent
+
+The Reflection Agent helps you refine your PDDL:
+
+1. **Automatic Analysis**
+   - Triggered when validation fails
+   - Provides error analysis and suggestions
+
+2. **Interactive Chat**
+   - Click "Chat with Agent" on story detail page
+   - Ask questions about your story
+   - Get guidance on fixing issues
 
 ---
 
 ## API Documentation
 
-### Base URL
+Full API documentation is available in [docs/API.md](docs/API.md).
 
-```
-http://localhost:5000/api/v1
-```
+### Key Endpoints
 
-### Authentication
+#### Story Management (Phase 1)
+- `POST /api/stories` - Create new story
+- `GET /api/stories` - List all stories
+- `GET /api/stories/:id` - Get story details
+- `POST /api/stories/:id/generate-pddl` - Generate PDDL
+- `POST /api/stories/:id/validate` - Validate PDDL
+- `POST /api/stories/:id/refine` - Refine PDDL
+- `POST /api/stories/:id/chat` - Chat with Reflection Agent
 
-All requests require a valid JWT token in the Authorization header:
+#### Game Play (Phase 2)
+- `POST /api/game/sessions` - Start game session
+- `GET /api/game/sessions/:id` - Get session state
+- `POST /api/game/sessions/:id/action` - Take action
+- `GET /api/game/sessions/:id/history` - Get history
 
-```
-Authorization: Bearer <your_jwt_token>
-```
-
-### Main Endpoints
-
-#### Quests
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/quests` | List all quests |
-| GET | `/quests/:id` | Get quest details |
-| POST | `/quests` | Create new quest |
-| PUT | `/quests/:id` | Update quest |
-| DELETE | `/quests/:id` | Delete quest |
-| PATCH | `/quests/:id/status` | Update quest status |
-
-#### Users
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/auth/register` | Register new user |
-| POST | `/auth/login` | User login |
-| GET | `/users/:id` | Get user profile |
-| PUT | `/users/:id` | Update user profile |
-| POST | `/auth/logout` | User logout |
-
-#### Reports
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/reports/summary` | Get summary report |
-| GET | `/reports/quests` | Get quest statistics |
-| GET | `/reports/team` | Get team metrics |
-
-### Example Requests
-
-#### Get All Quests
+### Example: Create and Play a Story
 
 ```bash
-curl -X GET http://localhost:5000/api/v1/quests \
-  -H "Authorization: Bearer your_token" \
-  -H "Content-Type: application/json"
-```
-
-#### Create a Quest
-
-```bash
-curl -X POST http://localhost:5000/api/v1/quests \
-  -H "Authorization: Bearer your_token" \
+# 1. Create story
+curl -X POST http://localhost:5000/api/stories \
   -H "Content-Type: application/json" \
   -d '{
-    "title": "Complete Project Documentation",
-    "description": "Write comprehensive documentation for QuestMaster",
-    "priority": "high",
-    "dueDate": "2025-12-31",
-    "assigneeId": "user123"
+    "title": "The Crystal Cave",
+    "lore_content": "You seek a magical crystal...",
+    "branching_factor_min": 2,
+    "branching_factor_max": 4,
+    "depth_min": 3,
+    "depth_max": 8
   }'
-```
 
----
+# 2. Generate PDDL (story_id = 1)
+curl -X POST http://localhost:5000/api/stories/1/generate-pddl
 
-## Database Schema
+# 3. Validate PDDL
+curl -X POST http://localhost:5000/api/stories/1/validate
 
-### Core Tables
+# 4. Start game
+curl -X POST http://localhost:5000/api/game/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"story_id": 1}'
 
-#### Quests Table
-
-```sql
-CREATE TABLE quests (
-  id UUID PRIMARY KEY,
-  title VARCHAR(255) NOT NULL,
-  description TEXT,
-  status VARCHAR(50) DEFAULT 'open',
-  priority VARCHAR(50) DEFAULT 'medium',
-  assignee_id UUID REFERENCES users(id),
-  created_by UUID REFERENCES users(id),
-  due_date TIMESTAMP,
-  completed_date TIMESTAMP,
-  progress_percentage INT DEFAULT 0,
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-#### Users Table
-
-```sql
-CREATE TABLE users (
-  id UUID PRIMARY KEY,
-  username VARCHAR(100) UNIQUE NOT NULL,
-  email VARCHAR(100) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  role VARCHAR(50) DEFAULT 'user',
-  first_name VARCHAR(100),
-  last_name VARCHAR(100),
-  created_at TIMESTAMP DEFAULT NOW(),
-  updated_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-#### Quest_History Table
-
-```sql
-CREATE TABLE quest_history (
-  id UUID PRIMARY KEY,
-  quest_id UUID REFERENCES quests(id),
-  change_type VARCHAR(50),
-  old_value TEXT,
-  new_value TEXT,
-  changed_by UUID REFERENCES users(id),
-  changed_at TIMESTAMP DEFAULT NOW()
-);
+# 5. Take action (session_id = 1)
+curl -X POST http://localhost:5000/api/game/sessions/1/action \
+  -H "Content-Type: application/json" \
+  -d '{"action": "explore_north"}'
 ```
 
 ---
 
 ## Development
 
-### Setting Up Development Environment
+### Project Structure
+
+- **Backend**: Flask application with service-oriented architecture
+- **Frontend**: React with functional components and hooks
+- **Database**: SQLAlchemy ORM with SQLite (dev) or PostgreSQL (prod)
+
+### Running in Development Mode
 
 ```bash
-# Install development dependencies
+# Backend with auto-reload
 cd backend
-npm install --save-dev nodemon jest supertest
+source venv/bin/activate
+export FLASK_ENV=development
+python run.py
 
-# Start development server with auto-reload
+# Frontend with hot reload
+cd frontend
 npm run dev
 ```
 
-### Code Style & Linting
+### Code Style
 
-```bash
-# Run ESLint
-npm run lint
+#### Python (Backend)
+- Follow PEP 8 style guide
+- Use docstrings for functions and classes
+- Type hints recommended
 
-# Fix linting issues
-npm run lint:fix
+#### JavaScript (Frontend)
+- ESLint configuration included
+- Functional components with hooks
+- Material-UI for consistent styling
 
-# Format code with Prettier
-npm run format
-```
+### Adding New Features
 
-### Git Workflow
+1. **New Service** (Backend)
+   - Create service in `backend/app/services/`
+   - Add routes in `backend/app/routes/`
+   - Register blueprint in `backend/app/__init__.py`
 
-1. Create a feature branch: `git checkout -b feature/feature-name`
-2. Make your changes
-3. Commit: `git commit -m "feat: add feature description"`
-4. Push: `git push origin feature/feature-name`
-5. Create a Pull Request
-
----
-
-## Testing
-
-### Running Tests
-
-```bash
-# Run all tests
-npm test
-
-# Run tests with coverage
-npm run test:coverage
-
-# Run specific test file
-npm test -- tests/quests.test.js
-
-# Watch mode
-npm test -- --watch
-```
-
-### Test Structure
-
-```
-backend/
-├── tests/
-│   ├── unit/              # Unit tests
-│   ├── integration/       # Integration tests
-│   └── fixtures/          # Test data
-```
-
-### Example Test
-
-```javascript
-describe('Quest Service', () => {
-  it('should create a new quest', async () => {
-    const quest = await questService.create({
-      title: 'Test Quest',
-      priority: 'high'
-    });
-    expect(quest.id).toBeDefined();
-    expect(quest.title).toBe('Test Quest');
-  });
-});
-```
+2. **New Page** (Frontend)
+   - Create component in `frontend/src/pages/`
+   - Add route in `frontend/src/App.jsx`
+   - Update navigation as needed
 
 ---
 
@@ -605,41 +495,44 @@ describe('Quest Service', () => {
 ### Docker Deployment
 
 ```bash
-# Build Docker image
-docker build -t questmaster:latest .
-
-# Run container
-docker run -p 5000:5000 questmaster:latest
-
-# Using docker-compose
+# Build and run with docker-compose
 docker-compose -f docker/docker-compose.yml up -d
+
+# Scale services
+docker-compose -f docker/docker-compose.yml up -d --scale backend=3
 ```
 
-### Kubernetes Deployment
+### Manual Deployment
+
+#### Backend (Production)
 
 ```bash
-# Apply Kubernetes configurations
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
+# Install production dependencies
+pip install -r requirements.txt gunicorn
 
-# Scale deployment
-kubectl scale deployment/questmaster --replicas=3
+# Run with gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 "app:create_app()"
 ```
 
-### Heroku Deployment
+#### Frontend (Production)
 
 ```bash
-# Login to Heroku
-heroku login
+# Build for production
+npm run build
 
-# Create app
-heroku create questmaster
+# Serve with nginx or similar
+# Build output is in frontend/dist/
+```
 
-# Deploy
-git push heroku main
+### Environment Variables (Production)
 
-# View logs
-heroku logs --tail
+```env
+# Backend
+FLASK_ENV=production
+SECRET_KEY=<strong-secret-key>
+DATABASE_URL=postgresql://user:pass@host:5432/questmaster
+OPENAI_API_KEY=<your-key>
+DALLE_ENABLED=True
 ```
 
 ---
@@ -648,73 +541,81 @@ heroku logs --tail
 
 ### Common Issues
 
-#### Issue: Database Connection Failed
+#### OpenAI API Errors
 
-**Solution:**
-```bash
-# Check PostgreSQL is running
-psql -U postgres -c "SELECT version();"
+**Problem**: "Authentication failed" or rate limit errors
 
-# Verify connection string in .env
-# Ensure database exists
-psql -U postgres -l
-```
+**Solutions:**
+- Verify API key is correct in `.env`
+- Check OpenAI account has credits
+- Ensure you have access to GPT-4 model
+- Rate limits: Add delays between requests
 
-#### Issue: Port Already in Use
+#### PDDL Validation Fails
 
-**Solution:**
-```bash
-# Find process using port 5000
-lsof -i :5000
+**Problem**: Validation always fails even with correct PDDL
 
-# Kill process
-kill -9 <PID>
-```
+**Solutions:**
+- If Fast Downward not installed, only syntax checking runs
+- Install Fast Downward for full validation
+- Check FAST_DOWNWARD_PATH in `.env` is correct
+- Basic syntax validation still works without Fast Downward
 
-#### Issue: Authentication Token Expired
+#### Frontend Can't Connect to Backend
 
-**Solution:**
-- Request a new token by logging in again
-- Check JWT_SECRET matches in .env
+**Problem**: API calls fail with network errors
 
-#### Issue: Frontend Cannot Connect to Backend
+**Solutions:**
+- Ensure backend is running on port 5000
+- Check VITE_API_URL in frontend `.env`
+- Verify CORS_ORIGINS in backend `.env` includes frontend URL
+- Check firewall settings
 
-**Solution:**
-```bash
-# Verify REACT_APP_API_URL in .env
-# Check backend is running: curl http://localhost:5000/api/health
-# Check CORS settings in backend
-```
+#### Database Errors
+
+**Problem**: "Table doesn't exist" or connection errors
+
+**Solutions:**
+- Database is created automatically on first run
+- For PostgreSQL, ensure database exists and credentials are correct
+- Check DATABASE_URL format in `.env`
+- For SQLite, ensure write permissions in backend directory
 
 ### Debug Mode
 
-```bash
-# Enable debug logging
-DEBUG=questmaster:* npm start
+Enable detailed logging:
 
-# Verbose output
-NODE_DEBUG=* npm start
+```bash
+# Backend
+export FLASK_DEBUG=True
+export LOG_LEVEL=DEBUG
+python run.py
+
+# View frontend console
+# Open browser DevTools (F12)
 ```
 
 ---
 
 ## Contributing
 
-We welcome contributions! Please follow these steps:
+We welcome contributions! To contribute:
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+3. Make your changes
+4. Test thoroughly
+5. Commit changes (`git commit -m 'Add AmazingFeature'`)
+6. Push to branch (`git push origin feature/AmazingFeature`)
+7. Open a Pull Request
 
 ### Development Guidelines
 
-- Follow [Node.js Best Practices](https://nodejs.org/en/docs/guides/nodejs-best-practices/)
-- Write unit tests for new features
-- Update documentation
-- Maintain code style consistency
-- Use meaningful commit messages
+- Follow existing code style and conventions
+- Add comments for complex logic
+- Update documentation for new features
+- Write clear commit messages
+- Test your changes before submitting
 
 ---
 
@@ -727,29 +628,22 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Support & Contact
 
 - **Issues**: [GitHub Issues](https://github.com/Gory-git/ProgettoQuestMaster/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/Gory-git/ProgettoQuestMaster/discussions)
+- **Documentation**: [docs/](docs/)
 - **Email**: support@questmaster.io
-
----
-
-## Changelog
-
-### Version 1.0.0 (2025-12-15)
-- Initial release
-- Core quest management features
-- User authentication and authorization
-- Progress tracking and reporting
-- Real-time notifications
 
 ---
 
 ## Acknowledgments
 
-- Team members and contributors
-- Open-source libraries and frameworks
-- Community support
+- OpenAI for GPT-4 and DALL-E APIs
+- Fast Downward planning system
+- React and Flask communities
+- All contributors and supporters
 
 ---
 
-**Last Updated**: 2025-12-15
+**Built with ❤️ for interactive storytelling**
+
+**Last Updated**: 2025-12-16  
+**Version**: 1.0.0  
 **Maintained By**: Gory-git
