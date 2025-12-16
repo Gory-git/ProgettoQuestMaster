@@ -17,7 +17,7 @@ class PDDLParser:
         self.predicates = []
         self.objects = {}
         self.initial_state = set()
-        self.goal = set()
+        self.goal = {'positive': [], 'negative': []}  # Dict with positive/negative conditions
         self._parse()
     
     def _parse(self):
@@ -336,7 +336,16 @@ class ActionCalculator:
         return applicable
     
     def _generate_bindings(self, parameters: List[Dict[str, str]]) -> List[Dict[str, str]]:
-        """Generate all possible variable bindings for action parameters"""
+        """
+        Generate all possible variable bindings for action parameters.
+        
+        Note: This generates the Cartesian product of all possible object combinations,
+        which can have exponential complexity. For typical story domains with 5-20 objects
+        and 2-3 parameters per action, this is acceptable. For larger domains, consider:
+        - Limiting object combinations through type constraints
+        - Using heuristics to prune unlikely bindings
+        - Implementing lazy evaluation with generators
+        """
         if not parameters:
             return [{}]
         

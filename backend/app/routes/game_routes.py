@@ -15,7 +15,11 @@ bp = Blueprint('game', __name__)
 # Initialize service
 narrative_service = NarrativeService()
 
-# Store game engines for active sessions (in production, use Redis or similar)
+# Store game engines for active sessions
+# NOTE: This is an in-memory cache suitable for single-instance deployments.
+# For production with multiple instances, use Redis or a similar distributed cache
+# with proper serialization of GameEngine state. The current implementation is
+# NOT thread-safe and should be protected with locks in multi-threaded environments.
 _active_engines = {}
 
 
