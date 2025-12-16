@@ -376,12 +376,13 @@ class ActionCalculator:
         return bindings_list
     
     def _format_action_description(self, action_name: str, bindings: Dict[str, str]) -> str:
-        """Create human-readable action description"""
-        # Convert action name and bindings to readable format
-        parts = [action_name.replace('_', ' ').title()]
+        """Create human-readable action description in PDDL format"""
+        # Format as: action_name (param1, param2, param3)
+        # This will be parsed by _humanize_action in narrative_service
         if bindings:
-            parts.append('(' + ', '.join(f"{v}" for v in bindings.values()) + ')')
-        return ' '.join(parts)
+            params = ', '.join(bindings.values())
+            return f"{action_name} ({params})"
+        return action_name
 
 
 class GameState:
@@ -532,9 +533,66 @@ class GameEngine:
     
     def _get_action_narrative(self, action_name: str, bindings: Dict[str, str]) -> str:
         """Generate narrative description for an action"""
-        # Create a narrative description based on action and objects
-        formatted_name = action_name.replace('_', ' ').capitalize()
-        if bindings:
-            objects = ', '.join(bindings.values())
-            return f"{formatted_name} with {objects}"
-        return formatted_name
+        # Create PDDL format that will be parsed into natural language
+        action_lower = action_name.lower().replace('_', ' ').replace('-', ' ')
+        
+        if not bindings:
+            return action_lower.capitalize()
+        
+        # Get parameter values in order
+        params = list(bindings.values())
+        
+        # Common action patterns for natural language generation
+        if 'move' in action_lower or 'go' in action_lower:
+            # move (character, from, to) -> "Character moves from X to Y"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} moves from {params[1]} to {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} moves to {params[1]}"
+        
+        elif 'take' in action_lower or 'pick' in action_lower or 'get' in action_lower:
+            # take_item (character, item, location) -> "Character takes item at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} takes {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} takes {params[1]}"
+        
+        elif 'drop' in action_lower or 'put' in action_lower or 'place' in action_lower:
+            # drop_item (character, item, location) -> "Character drops item at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} drops {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} drops {params[1]}"
+        
+        elif 'save' in action_lower or 'rescue' in action_lower:
+            # save_man (character, person, location) -> "Character saves person at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} saves {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} saves {params[1]}"
+        
+        elif 'give' in action_lower or 'hand' in action_lower:
+            # give_item (giver, receiver, item, location) -> "Giver gives item to receiver at location"
+            if len(params) >= 4:
+                return f"{params[0].capitalize()} gives {params[2]} to {params[1]} at {params[3]}"
+            elif len(params) >= 3:
+                return f"{params[0].capitalize()} gives {params[2]} to {params[1]}"
+        
+        elif 'talk' in action_lower or 'speak' in action_lower or 'converse' in action_lower:
+            # talk_to (character, person, location) -> "Character talks to person at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} talks to {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} talks to {params[1]}"
+        
+        # Generic fallback: "Character action_name at/with param2..."
+        action_readable = ' '.join(word for word in action_lower.split())
+        
+        if len(params) == 1:
+            return f"{params[0].capitalize()} {action_readable}"
+        elif len(params) == 2:
+            return f"{params[0].capitalize()} {action_readable} {params[1]}"
+        else:
+            # Multiple params: "Character does action with param2, param3..."
+            other_params = ', '.join(params[1:])
+            return f"{params[0].capitalize()} {action_readable} involving {other_params}"

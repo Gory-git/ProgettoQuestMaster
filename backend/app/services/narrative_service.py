@@ -4,8 +4,9 @@ Generates narrative text and optional images for story gameplay
 """
 
 import os
-import openai
+from openai import OpenAI
 from typing import Dict, List, Optional
+import re
 
 
 class NarrativeService:
@@ -18,7 +19,7 @@ class NarrativeService:
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set in environment")
-        openai.api_key = self.api_key
+        self.client = OpenAI(api_key=self.api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-4')
         self.dalle_enabled = os.getenv('DALLE_ENABLED', 'False').lower() == 'true'
         self.dalle_model = os.getenv('DALLE_MODEL', 'dall-e-3')
@@ -43,7 +44,7 @@ class NarrativeService:
         prompt = self._create_narrative_prompt(lore, current_state, action_taken, available_actions)
         
         try:
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -112,7 +113,7 @@ Write in second person ("You...") and present tense.
             # Create image prompt from narrative
             image_prompt = self._create_image_prompt(narrative_text, lore_context)
             
-            response = openai.Image.create(
+            response = self.client.images.generate(
                 model=self.dalle_model,
                 prompt=image_prompt,
                 size=self.dalle_size,
@@ -180,16 +181,82 @@ Fantasy art style, high quality, professional illustration."""
         Convert PDDL action to human-readable text
         
         Args:
-            action: PDDL action string
+            action: PDDL action string like "move (agent, loc1, loc2)" or "take_item (char, item, loc)"
             
         Returns:
-            Humanized action text
+            Humanized action text like "Agent moves from loc1 to loc2"
         """
-        # Remove parentheses and underscores
-        clean = action.replace('(', '').replace(')', '').replace('_', ' ')
+        # Parse PDDL action format: "action_name (param1, param2, param3)"
+        match = re.match(r'([a-z_-]+)\s*\(([^)]+)\)', action, re.IGNORECASE)
         
-        # Capitalize first letter of each word
-        words = clean.split()
-        humanized = ' '.join(word.capitalize() for word in words)
+        if not match:
+            # Fallback: just clean up the text
+            clean = action.replace('(', '').replace(')', '').replace('_', ' ')
+            words = clean.split()
+            return ' '.join(word.capitalize() for word in words)
         
-        return humanized
+        action_name = match.group(1)
+        params_str = match.group(2)
+        params = [p.strip() for p in params_str.split(',')]
+        
+        # Create natural language based on action patterns
+        action_lower = action_name.lower().replace('_', ' ').replace('-', ' ')
+        
+        if not params:
+            return action_lower.capitalize()
+        
+        # Common action patterns
+        if 'move' in action_lower or 'go' in action_lower:
+            # move (character, from, to) -> "Character moves from X to Y"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} moves from {params[1]} to {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} moves to {params[1]}"
+        
+        elif 'take' in action_lower or 'pick' in action_lower or 'get' in action_lower:
+            # take_item (character, item, location) -> "Character takes item at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} takes {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} takes {params[1]}"
+        
+        elif 'drop' in action_lower or 'put' in action_lower or 'place' in action_lower:
+            # drop_item (character, item, location) -> "Character drops item at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} drops {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} drops {params[1]}"
+        
+        elif 'save' in action_lower or 'rescue' in action_lower:
+            # save_man (character, person, location) -> "Character saves person at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} saves {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} saves {params[1]}"
+        
+        elif 'give' in action_lower or 'hand' in action_lower:
+            # give_item (giver, receiver, item, location) -> "Giver gives item to receiver at location"
+            if len(params) >= 4:
+                return f"{params[0].capitalize()} gives {params[2]} to {params[1]} at {params[3]}"
+            elif len(params) >= 3:
+                return f"{params[0].capitalize()} gives {params[2]} to {params[1]}"
+        
+        elif 'talk' in action_lower or 'speak' in action_lower or 'converse' in action_lower:
+            # talk_to (character, person, location) -> "Character talks to person at location"
+            if len(params) >= 3:
+                return f"{params[0].capitalize()} talks to {params[1]} at {params[2]}"
+            elif len(params) >= 2:
+                return f"{params[0].capitalize()} talks to {params[1]}"
+        
+        # Generic fallback: "Character action_name at/with param2..."
+        # Convert action name to readable form
+        action_readable = ' '.join(word.capitalize() for word in action_lower.split())
+        
+        if len(params) == 1:
+            return f"{params[0].capitalize()} {action_readable.lower()}"
+        elif len(params) == 2:
+            return f"{params[0].capitalize()} {action_readable.lower()} {params[1]}"
+        else:
+            # Multiple params: "Character does action with/at param2, param3..."
+            other_params = ', '.join(params[1:])
+            return f"{params[0].capitalize()} {action_readable.lower()} involving {other_params}"

@@ -5,7 +5,7 @@ Uses OpenAI LLM to generate PDDL domain and problem files from lore documents
 
 import os
 import re
-import openai
+from openai import OpenAI
 from typing import Dict, Tuple
 
 
@@ -19,7 +19,7 @@ class PDDLGenerationService:
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set in environment")
-        openai.api_key = self. api_key
+        self.client = OpenAI(api_key=self.api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-4')
         self.temperature = float(os.getenv('OPENAI_TEMPERATURE', 0.7))
     
@@ -165,16 +165,16 @@ Output ONLY the PDDL problem file content, starting with (define (problem ...) a
             Generated text response
         """
         try:
-            response = openai. ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert PDDL developer and interactive storytelling designer. Output valid PDDL syntax without explanations. "},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self. temperature,
+                temperature=self.temperature,
                 max_tokens=3000
             )
-            return response.choices[0].message.content. strip()
+            return response.choices[0].message.content.strip()
         except Exception as e:
             raise Exception(f"OpenAI API error: {str(e)}")
     
