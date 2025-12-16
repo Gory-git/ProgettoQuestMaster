@@ -36,13 +36,48 @@ class PDDLParser:
                 pred_name = pred.split()[0] if pred.split() else pred
                 self.predicates.append(pred_name)
         
-        # Parse actions
-        action_pattern = r'\(:action\s+(\w+)\s+:parameters\s+\((.*?)\)\s+:precondition\s+(.*?)\s+:effect\s+(.*?)\s*\)'
-        for match in re.finditer(action_pattern, self.domain_content, re.DOTALL):
-            action_name = match.group(1)
-            parameters = match.group(2)
-            precondition = match.group(3)
-            effect = match.group(4)
+        # Parse actions using a better approach
+        # Find all :action blocks
+        action_blocks = []
+        i = 0
+        while i < len(self.domain_content):
+            action_start = self.domain_content.find('(:action', i)
+            if action_start == -1:
+                break
+            
+            # Find the matching closing paren for this action
+            depth = 0
+            j = action_start
+            while j < len(self.domain_content):
+                if self.domain_content[j] == '(':
+                    depth += 1
+                elif self.domain_content[j] == ')':
+                    depth -= 1
+                    if depth == 0:
+                        action_blocks.append(self.domain_content[action_start:j+1])
+                        break
+                j += 1
+            i = j + 1
+        
+        # Now parse each action block
+        for action_block in action_blocks:
+            # Extract action name
+            name_match = re.search(r'\(:action\s+(\w+)', action_block)
+            if not name_match:
+                continue
+            action_name = name_match.group(1)
+            
+            # Extract parameters
+            params_match = re.search(r':parameters\s+\((.*?)\)', action_block, re.DOTALL)
+            parameters = params_match.group(1) if params_match else ''
+            
+            # Extract precondition
+            precond_match = re.search(r':precondition\s+(.+?)\s+:effect', action_block, re.DOTALL)
+            precondition = precond_match.group(1).strip() if precond_match else ''
+            
+            # Extract effect (everything after :effect until the end)
+            effect_match = re.search(r':effect\s+(.+?)\s*\)\s*$', action_block, re.DOTALL)
+            effect = effect_match.group(1).strip() if effect_match else ''
             
             self.actions[action_name] = {
                 'name': action_name,
@@ -128,9 +163,23 @@ class PDDLParser:
         
         # Handle (and ...) wrapper
         if effect_str.startswith('(and'):
-            effect_str = effect_str[4:].strip()
-            if effect_str.endswith(')'):
-                effect_str = effect_str[:-1].strip()
+            # Find matching closing paren for 'and'
+            depth = 0
+            start = 4  # after '(and'
+            i = start
+            while i < len(effect_str) and effect_str[i].isspace():
+                i += 1
+            start = i
+            
+            # Find the end of the 'and' expression
+            for j in range(len(effect_str)):
+                if effect_str[j] == '(':
+                    depth += 1
+                elif effect_str[j] == ')':
+                    depth -= 1
+                    if depth == 0:  # Found matching paren for initial 'and'
+                        effect_str = effect_str[start:j].strip()
+                        break
         
         effects = {'add': [], 'delete': []}
         
