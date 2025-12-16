@@ -61,8 +61,8 @@ class PDDLParser:
         
         # Now parse each action block
         for action_block in action_blocks:
-            # Extract action name
-            name_match = re.search(r'\(:action\s+(\w+)', action_block)
+            # Extract action name (allow hyphens in action names)
+            name_match = re.search(r'\(:action\s+([\w-]+)', action_block)
             if not name_match:
                 continue
             action_name = name_match.group(1)
