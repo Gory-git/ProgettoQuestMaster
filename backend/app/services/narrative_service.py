@@ -4,8 +4,10 @@ Generates narrative text and optional images for story gameplay
 """
 
 import os
-import openai
+from openai import OpenAI
 from typing import Dict, List, Optional
+import re
+from .game_service import humanize_pddl_action
 
 
 class NarrativeService:
@@ -18,7 +20,7 @@ class NarrativeService:
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set in environment")
-        openai.api_key = self.api_key
+        self.client = OpenAI(api_key=self.api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-4')
         self.dalle_enabled = os.getenv('DALLE_ENABLED', 'False').lower() == 'true'
         self.dalle_model = os.getenv('DALLE_MODEL', 'dall-e-3')
@@ -43,7 +45,7 @@ class NarrativeService:
         prompt = self._create_narrative_prompt(lore, current_state, action_taken, available_actions)
         
         try:
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -112,7 +114,7 @@ Write in second person ("You...") and present tense.
             # Create image prompt from narrative
             image_prompt = self._create_image_prompt(narrative_text, lore_context)
             
-            response = openai.Image.create(
+            response = self.client.images.generate(
                 model=self.dalle_model,
                 prompt=image_prompt,
                 size=self.dalle_size,
@@ -180,16 +182,10 @@ Fantasy art style, high quality, professional illustration."""
         Convert PDDL action to human-readable text
         
         Args:
-            action: PDDL action string
+            action: PDDL action string like "move (agent, loc1, loc2)" or "take_item (char, item, loc)"
             
         Returns:
-            Humanized action text
+            Humanized action text like "Agent moves from loc1 to loc2"
         """
-        # Remove parentheses and underscores
-        clean = action.replace('(', '').replace(')', '').replace('_', ' ')
-        
-        # Capitalize first letter of each word
-        words = clean.split()
-        humanized = ' '.join(word.capitalize() for word in words)
-        
-        return humanized
+        # Use shared humanization logic from game_service
+        return humanize_pddl_action(action)
