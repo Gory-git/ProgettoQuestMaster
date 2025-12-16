@@ -1,160 +1,251 @@
-"""
-PDDL Generation Service
-Uses OpenAI LLM to generate PDDL domain and problem files from lore documents
-"""
-
-import os
-import openai
-from typing import Dict, Tuple
+import re
+from typing import Optional, Dict, Any, List
+from app.models.pddl_domain import PDDLDomain
+from app.models.pddl_problem import PDDLProblem
+from app.services.llm_service import LLMService
 
 
-class PDDLGenerationService:
-    """
-    Service for generating PDDL files using LLM
-    """
+class PDDLService:
+    """Service for PDDL domain and problem handling with AI generation and refinement."""
     
-    def __init__(self):
-        """Initialize OpenAI client"""
-        self.api_key = os.getenv('OPENAI_API_KEY')
-        if not self.api_key:
-            raise ValueError("OPENAI_API_KEY not set in environment")
-        openai.api_key = self.api_key
-        self.model = os.getenv('OPENAI_MODEL', 'gpt-4')
-        self.temperature = float(os.getenv('OPENAI_TEMPERATURE', 0.7))
+    def __init__(self, llm_service: LLMService):
+        self.llm_service = llm_service
     
-    def generate_pddl(self, lore_content: str, branching_factor_min: int, 
-                     branching_factor_max: int, depth_min: int, depth_max: int) -> Tuple[str, str]:
+    @staticmethod
+    def _clean_pddl(content: str) -> str:
         """
-        Generate PDDL domain and problem files from lore content
+        Clean PDDL content by extracting only valid PDDL code and removing comments/extra text.
+        
+        This function:
+        - Removes AI explanations before/after PDDL code
+        - Strips markdown code blocks (```pddl ... ```)
+        - Removes single-line comments (;)
+        - Removes multi-line comments if present
+        - Preserves only valid PDDL structure
         
         Args:
-            lore_content: The story lore document
-            branching_factor_min: Minimum number of actions available at each state
-            branching_factor_max: Maximum number of actions available at each state
-            depth_min: Minimum steps to reach goal
-            depth_max: Maximum steps to reach goal
+            content: Raw PDDL content potentially containing extra text and comments
             
         Returns:
-            Tuple of (domain_content, problem_content)
+            Cleaned PDDL code with only valid structure
         """
+        # Remove markdown code blocks (```pddl ... ``` or ``` ... ```)
+        content = re.sub(r'```(?:pddl)?\s*\n', '', content)
+        content = re.sub(r'\n```', '', content)
         
-        # Generate PDDL domain
-        domain_prompt = self._create_domain_prompt(lore_content, branching_factor_min, branching_factor_max)
-        domain_content = self._call_openai(domain_prompt)
+        # Extract PDDL blocks that start with (define and end with closing parenthesis
+        # This handles cases where there's explanatory text before/after the PDDL
+        pddl_pattern = r'(\(define[^)]*(?:\([^)]*\))*\))'
+        matches = re.findall(pddl_pattern, content, re.DOTALL)
         
-        # Generate PDDL problem
-        problem_prompt = self._create_problem_prompt(lore_content, domain_content, depth_min, depth_max)
-        problem_content = self._call_openai(problem_prompt)
+        if matches:
+            # If we found PDDL blocks, use the first complete one
+            content = matches[0]
         
-        return domain_content, problem_content
+        # Remove single-line comments (everything after ;)
+        lines = content.split('\n')
+        cleaned_lines = []
+        for line in lines:
+            # Remove comment part (everything from ; onwards)
+            if ';' in line:
+                line = line[:line.index(';')]
+            # Strip whitespace and keep non-empty lines
+            stripped = line.strip()
+            if stripped:
+                cleaned_lines.append(line)
+        
+        content = '\n'.join(cleaned_lines)
+        
+        # Remove extra whitespace while preserving structure
+        content = re.sub(r'\n\s*\n', '\n', content)  # Remove blank lines
+        content = re.sub(r'\s+', ' ', content)  # Normalize spaces
+        
+        # Re-add newlines for readability after parentheses
+        content = re.sub(r'\)\s*\(', ')\n(', content)
+        content = content.strip()
+        
+        return content
     
-    def _create_domain_prompt(self, lore: str, bf_min: int, bf_max: int) -> str:
-        """Create prompt for domain generation"""
-        return f"""You are an expert in PDDL (Planning Domain Definition Language) and interactive storytelling.
-
-Given the following story lore, create a PDDL domain file that models the adventure as a planning problem.
-
-LORE:
-{lore}
-
-CONSTRAINTS:
-- Branching factor: {bf_min}-{bf_max} actions should be available at each state
-- Each action should represent a meaningful story choice
-- Include predicates to track story state, character conditions, inventory, locations, etc.
-
-REQUIREMENTS:
-1. Use PDDL 2.1 or compatible syntax
-2. Add descriptive comments on each line explaining what each element represents
-3. Define appropriate types for objects (character, location, item, etc.)
-4. Define predicates that capture the story state
-5. Define actions with preconditions and effects
-6. Ensure actions are logically consistent
-
-Output ONLY the PDDL domain file content, starting with (define (domain ...) and ending with the closing parenthesis.
-"""
-    
-    def _create_problem_prompt(self, lore: str, domain: str, depth_min: int, depth_max: int) -> str:
-        """Create prompt for problem generation"""
-        return f"""You are an expert in PDDL (Planning Domain Definition Language) and interactive storytelling.
-
-Given the following story lore and PDDL domain, create a PDDL problem file that defines the initial state and goal.
-
-LORE:
-{lore}
-
-DOMAIN:
-{domain}
-
-CONSTRAINTS:
-- The solution should require between {depth_min} and {depth_max} steps to reach the goal
-- Initial state should match the story setup described in the lore
-- Goal should reflect the story objective
-
-REQUIREMENTS:
-1. Define all objects mentioned in the domain
-2. Set up initial state predicates that match the story beginning
-3. Define a goal that represents story completion/success
-4. Add descriptive comments explaining each element
-5. Ensure consistency with the domain file
-
-Output ONLY the PDDL problem file content, starting with (define (problem ...) and ending with the closing parenthesis.
-"""
-    
-    def _call_openai(self, prompt: str) -> str:
+    def generate_pddl_domain(
+        self,
+        domain_name: str,
+        problem_description: str,
+        requirements: Optional[List[str]] = None
+    ) -> PDDLDomain:
         """
-        Call OpenAI API with the given prompt
+        Generate a PDDL domain using AI based on problem description.
         
         Args:
-            prompt: The prompt to send to the model
+            domain_name: Name for the PDDL domain
+            problem_description: Description of the domain problem
+            requirements: Optional list of PDDL requirements
             
         Returns:
-            Generated text response
+            PDDLDomain object with generated content
         """
-        try:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "You are an expert PDDL developer and interactive storytelling designer."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=self.temperature,
-                max_tokens=3000
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            raise Exception(f"OpenAI API error: {str(e)}")
+        requirements_str = ", ".join(requirements) if requirements else "basic requirements"
+        
+        prompt = f"""Generate a complete PDDL domain definition for the following problem:
+
+Problem: {problem_description}
+Domain Name: {domain_name}
+Requirements: {requirements_str}
+
+Generate only valid PDDL code without any explanation. The domain should include:
+- Proper (define (domain ...)) structure
+- Predicates section
+- Actions section with appropriate preconditions and effects
+
+Ensure the PDDL syntax is valid and well-structured."""
+        
+        raw_content = self.llm_service.generate_content(prompt)
+        cleaned_content = self._clean_pddl(raw_content)
+        
+        return PDDLDomain(
+            name=domain_name,
+            content=cleaned_content,
+            raw_ai_response=raw_content
+        )
     
-    def refine_pddl(self, current_pddl: str, validation_errors: str, 
-                    reflection_feedback: str, author_input: str) -> str:
+    def generate_pddl_problem(
+        self,
+        problem_name: str,
+        domain_name: str,
+        problem_description: str
+    ) -> PDDLProblem:
         """
-        Refine PDDL based on validation errors and feedback
+        Generate a PDDL problem using AI based on problem description.
         
         Args:
-            current_pddl: Current PDDL content
-            validation_errors: Errors from validator
-            reflection_feedback: Reflection agent's analysis
-            author_input: Author's modification requests
+            problem_name: Name for the PDDL problem
+            domain_name: Name of the domain this problem uses
+            problem_description: Description of the specific problem instance
             
         Returns:
-            Refined PDDL content
+            PDDLProblem object with generated content
         """
-        prompt = f"""You are an expert in PDDL debugging and refinement.
+        prompt = f"""Generate a complete PDDL problem definition for the following:
 
-The following PDDL has validation errors. Please fix them based on the feedback provided.
+Problem Name: {problem_name}
+Domain: {domain_name}
+Description: {problem_description}
 
-CURRENT PDDL:
-{current_pddl}
+Generate only valid PDDL code without any explanation. The problem should include:
+- Proper (define (problem ...)) structure
+- Objects section
+- Initial state section
+- Goal section
 
-VALIDATION ERRORS:
-{validation_errors}
+Ensure the PDDL syntax is valid and references the correct domain."""
+        
+        raw_content = self.llm_service.generate_content(prompt)
+        cleaned_content = self._clean_pddl(raw_content)
+        
+        return PDDLProblem(
+            name=problem_name,
+            domain_name=domain_name,
+            content=cleaned_content,
+            raw_ai_response=raw_content
+        )
+    
+    def refine_pddl_domain(
+        self,
+        domain: PDDLDomain,
+        feedback: str
+    ) -> PDDLDomain:
+        """
+        Refine an existing PDDL domain based on user feedback.
+        
+        Args:
+            domain: The PDDLDomain to refine
+            feedback: User feedback for refinement
+            
+        Returns:
+            Updated PDDLDomain with refined content
+        """
+        prompt = f"""Refine the following PDDL domain based on the feedback provided:
 
-REFLECTION AGENT ANALYSIS:
-{reflection_feedback}
+Current Domain:
+{domain.content}
 
-AUTHOR INPUT:
-{author_input}
+Feedback for Refinement:
+{feedback}
 
-Please provide the corrected PDDL file. Maintain all comments and only fix the issues identified.
-Output ONLY the corrected PDDL content.
-"""
-        return self._call_openai(prompt)
+Generate the refined PDDL domain code. Make only the necessary changes to address the feedback.
+Generate only valid PDDL code without any explanation."""
+        
+        raw_content = self.llm_service.generate_content(prompt)
+        cleaned_content = self._clean_pddl(raw_content)
+        
+        domain.content = cleaned_content
+        domain.raw_ai_response = raw_content
+        domain.version = (domain.version or 0) + 1
+        
+        return domain
+    
+    def refine_pddl_problem(
+        self,
+        problem: PDDLProblem,
+        feedback: str
+    ) -> PDDLProblem:
+        """
+        Refine an existing PDDL problem based on user feedback.
+        
+        Args:
+            problem: The PDDLProblem to refine
+            feedback: User feedback for refinement
+            
+        Returns:
+            Updated PDDLProblem with refined content
+        """
+        prompt = f"""Refine the following PDDL problem based on the feedback provided:
+
+Current Problem:
+{problem.content}
+
+Domain: {problem.domain_name}
+
+Feedback for Refinement:
+{feedback}
+
+Generate the refined PDDL problem code. Make only the necessary changes to address the feedback.
+Generate only valid PDDL code without any explanation."""
+        
+        raw_content = self.llm_service.generate_content(prompt)
+        cleaned_content = self._clean_pddl(raw_content)
+        
+        problem.content = cleaned_content
+        problem.raw_ai_response = raw_content
+        problem.version = (problem.version or 0) + 1
+        
+        return problem
+    
+    def validate_pddl_syntax(self, content: str) -> Dict[str, Any]:
+        """
+        Validate PDDL syntax (basic validation).
+        
+        Args:
+            content: PDDL content to validate
+            
+        Returns:
+            Dictionary with validation results
+        """
+        issues = []
+        
+        # Check for balanced parentheses
+        if content.count('(') != content.count(')'):
+            issues.append("Unbalanced parentheses")
+        
+        # Check for required keywords
+        if not re.search(r'\(define\s+\(', content):
+            issues.append("Missing '(define' declaration")
+        
+        # Check for domain or problem definition
+        if not re.search(r'\(domain\s+\w+\)', content) and not re.search(r'\(problem\s+\w+\)', content):
+            issues.append("Missing domain or problem definition")
+        
+        return {
+            "is_valid": len(issues) == 0,
+            "issues": issues,
+            "content_length": len(content)
+        }
