@@ -69,9 +69,23 @@ class PDDLParser:
         
         # Handle (and ...) wrapper
         if cond_str.startswith('(and'):
-            cond_str = cond_str[4:].strip()
-            if cond_str.endswith(')'):
-                cond_str = cond_str[:-1].strip()
+            # Find matching closing paren for 'and'
+            depth = 0
+            start = 4  # after '(and'
+            i = start
+            while i < len(cond_str) and cond_str[i].isspace():
+                i += 1
+            start = i
+            
+            # Find the end of the 'and' expression
+            for j in range(len(cond_str)):
+                if cond_str[j] == '(':
+                    depth += 1
+                elif cond_str[j] == ')':
+                    depth -= 1
+                    if depth == 0:  # Found matching paren for initial 'and'
+                        cond_str = cond_str[start:j].strip()
+                        break
         
         conditions = {'positive': [], 'negative': []}
         
@@ -187,7 +201,7 @@ class PDDLParser:
                 self.initial_state.add(pred.strip())
         
         # Parse goal
-        goal_match = re.search(r'\(:goal\s+(.*?)\s*\)\s*\)', self.problem_content, re.DOTALL)
+        goal_match = re.search(r'\(:goal\s+(.+?)\s*\)\s*\)\s*$', self.problem_content, re.DOTALL)
         if goal_match:
             goal_text = goal_match.group(1)
             goal_cond = self._parse_condition(goal_text)
