@@ -37,11 +37,19 @@ function GamePlayPage() {
       const response = await gameAPI.getSession(sessionId);
       setSession(response.data.session);
       
+      // Get available actions from response
+      if (response.data.available_actions) {
+        setActions(response.data.available_actions);
+      }
+      
       // Get the latest narrative from history
       const history = response.data.session.narrative_history;
       if (history && history.length > 0) {
         const latest = history[history.length - 1];
         setNarrative(latest.narrative);
+        if (latest.image_url) {
+          setImageUrl(latest.image_url);
+        }
       }
       
       setIsCompleted(response.data.session.is_completed);
@@ -52,12 +60,12 @@ function GamePlayPage() {
     }
   };
 
-  const handleAction = async (action) => {
+  const handleAction = async (actionData) => {
     setActionLoading(true);
     setError(null);
 
     try {
-      const response = await gameAPI.takeAction(sessionId, action);
+      const response = await gameAPI.takeAction(sessionId, actionData.action, actionData.bindings || {});
       
       setSession(response.data.session);
       setNarrative(response.data.narrative);
@@ -153,7 +161,7 @@ function GamePlayPage() {
                       boxShadow: 4
                     }
                   }}
-                  onClick={() => !actionLoading && handleAction(action.action)}
+                  onClick={() => !actionLoading && handleAction(action)}
                 >
                   <CardContent>
                     <Typography variant="h6" gutterBottom>

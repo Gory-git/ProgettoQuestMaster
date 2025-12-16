@@ -51,7 +51,7 @@ export const gameAPI = {
   getSession: (id) => api.get(`/game/sessions/${id}`),
   
   // Take action in game
-  takeAction: (id, action) => api.post(`/game/sessions/${id}/action`, { action }),
+  takeAction: (id, action, bindings) => api.post(`/game/sessions/${id}/action`, { action, bindings }),
   
   // Get session history
   getSessionHistory: (id) => api.get(`/game/sessions/${id}/history`),
