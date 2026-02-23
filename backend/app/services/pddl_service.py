@@ -123,7 +123,11 @@ REQUIREMENTS:
 7. Ensure actions are logically consistent
 8. Ensure the domain is highly connected. Every reachable state (except the goal) must have at least {bf_min} applicable actions. Avoid dead ends by providing 'backtrack' actions or alternative routes for every major decision.
 9. Never delete a predicate that is the sole enabler of all remaining story progress without providing an alternative route or action to re-establish it.
-10. CRITICAL: Avoid creating actions that can undo each other in cycles (A enables B, B undoes A, A enables B...) unless there is a clear path to the goal that breaks the cycle.
+10. CRITICAL: Avoid action cycles where two or more actions undo each other indefinitely without a way to reach the goal.
+    - Identify every pair of actions where action A adds predicate P and action B deletes predicate P (or vice versa). If applying A then B (or B then A) returns the world to the same state, that is a cycle A↔B.
+    - Every such cycle MUST have a concrete exit condition: at least one action in the cycle must also add a one-way "story-progress" predicate (e.g., `clue-discovered`, `door-unlocked-permanently`) that is NEVER deleted by any action, so that the cycle is only possible before that predicate is established and the story can always advance toward the goal.
+    - Example of a BAD cycle: `open_door` adds `(door-open)`, `close_door` deletes `(door-open)` - if `open_door` requires `(not (door-open))` and `close_door` requires `(door-open)`, the player can toggle forever with no progress.
+    - Example of the FIX: make `open_door` also add `(door-was-opened)` (never deleted), and let the next story step require `(door-was-opened)` rather than `(door-open)`, so progress is irreversible.
 
 Output ONLY the PDDL domain file content, starting with (define (domain .. .) and ending with the final closing parenthesis.  Do NOT include any explanation or comments before or after the PDDL code. 
 """
@@ -229,6 +233,7 @@ Please provide the corrected PDDL file.  Ensure:
 4. All required sections are present (:domain, :objects, :init, :goal)
 5. Syntax is valid PDDL
 6. If this is the domain file, ensure every action needed to reach the goal is present. If this is the problem file, ensure the goal predicates are reachable from the initial state using the domain actions.
+7. ANTI-CYCLE CHECK: Verify that no pair of actions can undo each other indefinitely without a path to the goal. For every pair of actions where action A adds a predicate that action B deletes (or vice versa), confirm that at least one of those actions also adds a one-way story-progress predicate that is never deleted by any action, making progress irreversible. If a cycle is found, fix it by introducing such a predicate (e.g., `event-completed`, `npc-convinced-permanently`) and making subsequent story steps depend on it rather than on the reversible predicate.
 
 Output ONLY the corrected PDDL content without any explanation.  Preserve the domain/problem name if it's correct.
 """
