@@ -153,7 +153,85 @@ Fantasy art style, high quality, professional illustration."""
         
         return prompt[:1000]  # DALL-E has prompt length limits
     
-    def format_actions_for_display(self, actions: List[str], 
+    def narrativize_choices(self, lore: str, current_narrative: str,
+                            available_actions: List[str]) -> List[str]:
+        """
+        Transform PDDL action strings into engaging narrative choices.
+
+        Args:
+            lore: Story lore for context
+            current_narrative: The current narrative text to provide context
+            available_actions: List of PDDL action description strings to transform
+
+        Returns:
+            List of narrative choice strings in the same order as available_actions
+        """
+        if not available_actions:
+            return []
+
+        prompt = self._create_narrativize_prompt(lore, current_narrative, available_actions)
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a creative storyteller converting game actions into "
+                                   "immersive narrative choices. Keep each choice concise (5-10 words)."
+                    },
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=300
+            )
+
+            content = response.choices[0].message.content.strip()
+            lines = [line.strip() for line in content.split('\n') if line.strip()]
+            # Strip any leading numbering or bullet characters
+            narrativized = []
+            for line in lines:
+                line = re.sub(r'^[\d]+[.)]\s*', '', line)
+                line = re.sub(r'^[-*]\s*', '', line)
+                if line:
+                    narrativized.append(line)
+
+            # Ensure we return exactly as many choices as we received
+            if len(narrativized) == len(available_actions):
+                return narrativized
+
+            # Fallback: pad with humanized versions if counts don't match
+            result = []
+            for i, action in enumerate(available_actions):
+                result.append(narrativized[i] if i < len(narrativized)
+                               else humanize_pddl_action(action))
+            return result
+
+        except Exception as e:
+            print(f"Narrativize choices error: {str(e)}")
+            return [humanize_pddl_action(action) for action in available_actions]
+
+    def _create_narrativize_prompt(self, lore: str, current_narrative: str,
+                                   actions: List[str]) -> str:
+        """Create prompt for narrativizing action choices"""
+        actions_list = '\n'.join(f"{i + 1}. {a}" for i, a in enumerate(actions))
+        return f"""Transform these game actions into engaging narrative choices for an interactive story.
+
+STORY LORE:
+{lore[:500]}
+
+CURRENT NARRATIVE:
+{current_narrative[:300]}
+
+ACTIONS TO TRANSFORM (in order):
+{actions_list}
+
+For each action, write a short, immersive narrative choice (5-10 words) that fits the story context.
+Return EXACTLY {len(actions)} lines, one narrative choice per line, in the same order.
+Do not include numbers, bullets, or extra formatting - just the choice text.
+"""
+
+    def format_actions_for_display(self, actions: List[str],
                                    action_descriptions: Dict[str, str]) -> List[Dict]:
         """
         Format actions for display in the UI
