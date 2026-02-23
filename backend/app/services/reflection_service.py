@@ -4,7 +4,7 @@ Analyzes PDDL validation errors and provides intelligent feedback for refinement
 """
 
 import os
-import openai
+from openai import OpenAI
 from typing import List, Dict
 
 
@@ -18,7 +18,7 @@ class ReflectionAgentService:
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not set in environment")
-        openai.api_key = self.api_key
+        self.client = OpenAI(api_key=self.api_key)
         self.model = os.getenv('OPENAI_MODEL', 'gpt-4')
     
     def analyze_errors(self, pddl_domain: str, pddl_problem: str, 
@@ -38,7 +38,7 @@ class ReflectionAgentService:
         prompt = self._create_analysis_prompt(pddl_domain, pddl_problem, validation_errors)
         
         try:
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {
@@ -73,14 +73,10 @@ class ReflectionAgentService:
         return f"""Analyze the following PDDL validation errors and provide detailed feedback.
 
 PDDL DOMAIN:
-```
-{domain[:2000]}  # Truncate if too long
-```
+{domain[:2000]}
 
 PDDL PROBLEM:
-```
-{problem[:2000]}  # Truncate if too long
-```
+{problem[:2000]}
 
 VALIDATION ERRORS:
 {errors_text}
@@ -92,9 +88,13 @@ Please provide:
 4. Priority order for fixing (what to address first)
 5. Any potential side effects of the fixes
 
+IMPORTANT: If one of the errors states that the goal is unreachable from the initial state,
+analyze the domain actions and initial state carefully to identify which actions or predicates
+are missing or incorrectly defined that would allow the goal to be reached. Suggest concrete
+fixes to the domain and/or problem file.
+
 Format your response clearly with numbered sections.
-"""
-    
+"""    
     def _extract_suggestions(self, analysis: str) -> List[str]:
         """
         Extract actionable suggestions from analysis text
@@ -138,8 +138,7 @@ Format your response clearly with numbered sections.
             return 'none'
         
         # Check for critical keywords
-        critical_keywords = ['syntax', 'unbalanced', 'invalid', 'undefined', 'missing']
-        warning_keywords = ['warning', 'suggestion', 'recommend']
+        critical_keywords = ['syntax', 'unbalanced', 'invalid', 'undefined', 'missing', 'unreachable', 'no reachable']
         
         critical_count = sum(
             1 for error in errors 
@@ -181,7 +180,7 @@ Format your response clearly with numbered sections.
         messages.append({"role": "user", "content": user_message})
         
         try:
-            response = openai.ChatCompletion.create(
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
