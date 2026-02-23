@@ -7,7 +7,10 @@ import os
 from openai import OpenAI
 from typing import Dict, List, Optional
 import re
-from .game_service import humanize_pddl_action
+from .game_service import humanize_pddl_action, FALLBACK_ACTION_NAME
+
+# Pre-crafted narrative choice presented to the player when a dead-end is detected
+_FALLBACK_NARRATIVE_CHOICE = "In a moment of desperation, you rethink your strategy."
 
 
 class NarrativeService:
@@ -168,6 +171,25 @@ Fantasy art style, high quality, professional illustration."""
         """
         if not available_actions:
             return []
+
+        # Detect fallback actions and provide pre-crafted dramatic narratives without
+        # an unnecessary LLM call.  In practice the fallback is the sole action in the
+        # list (dead-end recovery), but we handle mixed lists for robustness.
+        fallback_indices = {i for i, a in enumerate(available_actions)
+                            if a == FALLBACK_ACTION_NAME}
+        if fallback_indices:
+            non_fallback = [a for i, a in enumerate(available_actions)
+                            if i not in fallback_indices]
+            if not non_fallback:
+                return [_FALLBACK_NARRATIVE_CHOICE] * len(available_actions)
+            # Recursively narrativize only the non-fallback subset
+            narrativized_non_fallback = self.narrativize_choices(
+                lore, current_narrative, non_fallback)
+            nf_iter = iter(narrativized_non_fallback)
+            return [
+                _FALLBACK_NARRATIVE_CHOICE if i in fallback_indices else next(nf_iter)
+                for i in range(len(available_actions))
+            ]
 
         prompt = self._create_narrativize_prompt(lore, current_narrative, available_actions)
 

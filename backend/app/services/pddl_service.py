@@ -121,6 +121,8 @@ REQUIREMENTS:
 5. Use narrative-flavored action names that reflect story events rather than generic movement primitives (e.g., use `investigate_dark_corner` or `negotiate_with_guard` instead of `move_loc1_loc2`)
 6. Ensure all parentheses are balanced and valid
 7. Ensure actions are logically consistent
+8. Ensure the domain is highly connected. Every reachable state (except the goal) must have at least {bf_min} applicable actions. Avoid dead ends by providing 'backtrack' actions or alternative routes for every major decision.
+9. Never delete a predicate that is the sole enabler of all remaining story progress without providing an alternative route or action to re-establish it.
 
 Output ONLY the PDDL domain file content, starting with (define (domain .. .) and ending with the final closing parenthesis.  Do NOT include any explanation or comments before or after the PDDL code. 
 """
