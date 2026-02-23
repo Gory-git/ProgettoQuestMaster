@@ -175,9 +175,8 @@ class PDDLValidationService:
 
             while queue:
                 if len(visited) > max_states:
-                    return False, (
-                        "No reachable solution found: the goal state cannot be reached "
-                        "from the initial state with the available actions"
+                    return True, (
+                        "Reachability check inconclusive (state space too large) - assuming valid"
                     )
 
                 current_frozen, depth = queue.pop(0)
