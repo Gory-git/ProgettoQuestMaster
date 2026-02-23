@@ -116,10 +116,11 @@ CONSTRAINTS:
 REQUIREMENTS:
 1. Use PDDL 2.1 or compatible syntax
 2. Define appropriate types for objects (character, location, item, etc.)
-3. Define predicates that capture the story state
+3. Define predicates that capture the story state; include predicates that track plot progress and character status (e.g., quest-started, npc-ally, clue-found)
 4. Define actions with preconditions and effects
-5. Ensure all parentheses are balanced and valid
-6. Ensure actions are logically consistent
+5. Use narrative-flavored action names that reflect story events rather than generic movement primitives (e.g., use `investigate_dark_corner` or `negotiate_with_guard` instead of `move_loc1_loc2`)
+6. Ensure all parentheses are balanced and valid
+7. Ensure actions are logically consistent
 
 Output ONLY the PDDL domain file content, starting with (define (domain .. .) and ending with the final closing parenthesis.  Do NOT include any explanation or comments before or after the PDDL code. 
 """

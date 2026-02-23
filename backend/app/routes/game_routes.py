@@ -162,6 +162,17 @@ def create_game_session():
             [a['display_text'] for a in game_data['available_actions'][:5]]
         )
         
+        # Narrativize available action choices
+        actions_to_show = game_data['available_actions']
+        if actions_to_show:
+            narrativized = narrative_service.narrativize_choices(
+                story.lore_content,
+                initial_narrative,
+                [a['description'] for a in actions_to_show]
+            )
+            for i, action in enumerate(actions_to_show):
+                action['display_text'] = narrativized[i]
+        
         # Generate image if enabled
         image_url = narrative_service.generate_image(initial_narrative, story.lore_content)
         
@@ -258,6 +269,17 @@ def take_action(session_id):
             action_name,
             available_action_names
         )
+        
+        # Narrativize available action choices
+        actions_to_show = result['available_actions']
+        if actions_to_show:
+            narrativized = narrative_service.narrativize_choices(
+                story.lore_content,
+                narrative,
+                [a['description'] for a in actions_to_show]
+            )
+            for i, action in enumerate(actions_to_show):
+                action['display_text'] = narrativized[i]
         
         # Generate image if enabled
         image_url = narrative_service.generate_image(narrative, story.lore_content)
