@@ -184,7 +184,8 @@ Output ONLY the PDDL problem file content, starting with (define (problem ...) a
             raise Exception(f"OpenAI API error: {str(e)}")
     
     def refine_pddl(self, current_pddl: str, validation_errors: str, 
-                    reflection_feedback: str, author_input: str) -> str:
+                    reflection_feedback: str, author_input: str,
+                    context_pddl: str = "") -> str:
         """
         Refine PDDL based on validation errors and feedback
         
@@ -193,17 +194,25 @@ Output ONLY the PDDL problem file content, starting with (define (problem ...) a
             validation_errors:  Errors from validator
             reflection_feedback: Reflection agent's analysis
             author_input: Author's modification requests
+            context_pddl: Complementary PDDL file (domain if refining problem, or vice versa)
             
         Returns:
             Refined PDDL content
         """
+        context_section = ""
+        if context_pddl:
+            context_section = f"""
+COMPLEMENTARY FILE FOR CONTEXT:
+{context_pddl}
+
+"""
         prompt = f"""You are an expert in PDDL debugging and refinement. 
 
 The following PDDL has validation errors.  Please fix them based on the feedback provided.
 
 CURRENT PDDL:
 {current_pddl}
-
+{context_section}
 VALIDATION ERRORS: 
 {validation_errors}
 
@@ -219,8 +228,80 @@ Please provide the corrected PDDL file.  Ensure:
 3. Problem name matches requirements
 4. All required sections are present (:domain, :objects, :init, :goal)
 5. Syntax is valid PDDL
+6. If this is the domain file, ensure every action needed to reach the goal is present. If this is the problem file, ensure the goal predicates are reachable from the initial state using the domain actions.
 
 Output ONLY the corrected PDDL content without any explanation.  Preserve the domain/problem name if it's correct.
 """
         refined_pddl = self._call_openai(prompt)
         return self._clean_pddl(refined_pddl)
+
+    def auto_fix_pddl(self, domain: str, problem: str,
+                      validation_errors: list, reflection_feedback: str) -> tuple:
+        """
+        Fix both domain and problem files together using full context.
+
+        Args:
+            domain: Current PDDL domain content
+            problem: Current PDDL problem content
+            validation_errors: List of validation error strings
+            reflection_feedback: Reflection agent's analysis text
+
+        Returns:
+            (fixed_domain, fixed_problem) tuple
+        """
+        errors_text = '\n'.join(f"- {e}" for e in validation_errors)
+
+        # Fix domain with full context
+        domain_prompt = f"""You are an expert PDDL debugger. Fix the PDDL domain file below.
+
+CURRENT DOMAIN (to fix):
+{domain}
+
+CURRENT PROBLEM (for context, do NOT output this):
+{problem}
+
+VALIDATION ERRORS:
+{errors_text}
+
+ANALYSIS:
+{reflection_feedback}
+
+REQUIREMENTS FOR THE FIXED DOMAIN:
+1. All parentheses must be balanced
+2. All action preconditions and effects must be consistent
+3. There must exist a sequence of actions from the initial state (in the problem) to the goal (in the problem)
+4. No unreachable actions or dead-end states
+5. CRITICAL: The goal predicate(s) defined in the problem MUST be achievable using the domain actions
+
+Output ONLY the corrected domain file starting with (define (domain ...
+"""
+        fixed_domain = self._clean_pddl(self._call_openai(domain_prompt))
+
+        # Fix problem with fixed domain as context
+        problem_prompt = f"""You are an expert PDDL debugger. Fix the PDDL problem file below.
+
+FIXED DOMAIN (for context, do NOT output this):
+{fixed_domain}
+
+CURRENT PROBLEM (to fix):
+{problem}
+
+VALIDATION ERRORS:
+{errors_text}
+
+ANALYSIS:
+{reflection_feedback}
+
+REQUIREMENTS FOR THE FIXED PROBLEM:
+1. All parentheses must be balanced
+2. The (:domain ...) reference must match the domain name exactly
+3. All objects used in :init and :goal must be declared in :objects
+4. All predicates used in :init and :goal must be defined in the domain
+5. CRITICAL: The goal state MUST be reachable from the initial state using the domain actions above
+6. Verify mentally: trace a path from initial state to goal using the available actions
+
+Output ONLY the corrected problem file starting with (define (problem ...
+"""
+        fixed_problem = self._clean_pddl(self._call_openai(problem_prompt))
+
+        return fixed_domain, fixed_problem

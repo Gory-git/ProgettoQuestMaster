@@ -10,6 +10,8 @@ import json
 
 bp = Blueprint('story', __name__)
 
+MAX_AUTO_FIX_ITERATIONS = 5  # Maximum number of auto-fix iterations
+
 # Initialize services
 pddl_service = PDDLGenerationService()
 validation_service = PDDLValidationService()
@@ -258,6 +260,91 @@ def update_story(story_id):
     db.session.commit()
     
     return jsonify(story.to_dict()), 200
+
+
+@bp.route('/stories/<int:story_id>/auto-fix', methods=['POST'])
+def auto_fix_pddl_route(story_id):
+    """Auto-fix PDDL iteratively until valid or max iterations reached"""
+    story = Story.query.get_or_404(story_id)
+
+    if not story.pddl_domain or not story.pddl_problem:
+        return jsonify({'error': 'No PDDL to fix'}), 400
+
+    domain = story.pddl_domain
+    problem = story.pddl_problem
+    iterations = 0
+    history = []
+
+    try:
+        for i in range(MAX_AUTO_FIX_ITERATIONS):
+            iterations = i + 1
+
+            # Validate current state
+            is_valid, errors = validation_service.validate(domain, problem)
+
+            if is_valid:
+                # Success! Save and mark as validated
+                story.pddl_domain = domain
+                story.pddl_problem = problem
+                story.is_validated = True
+                story.status = 'validated'
+                db.session.commit()
+
+                return jsonify({
+                    'success': True,
+                    'already_valid': (i == 0),
+                    'iterations': iterations,
+                    'final_errors': [],
+                    'story': story.to_dict(),
+                    'history': history
+                }), 200
+
+            # Get reflection analysis
+            analysis = reflection_service.analyze_errors(domain, problem, errors)
+
+            # Save refinement history for this iteration
+            refinement = RefinementHistory(
+                story_id=story.id,
+                iteration=len(story.refinement_history) + 1,
+                pddl_version=domain + '\n\n' + problem,
+                validation_errors=json.dumps(errors),
+                reflection_feedback=analysis['analysis']
+            )
+            db.session.add(refinement)
+            db.session.commit()
+
+            history.append({
+                'iteration': iterations,
+                'errors': errors,
+                'refinement_id': refinement.id
+            })
+
+            # Auto-fix both files
+            domain, problem = pddl_service.auto_fix_pddl(
+                domain, problem, errors, analysis['analysis']
+            )
+
+        # Max iterations reached — save best attempt anyway
+        story.pddl_domain = domain
+        story.pddl_problem = problem
+        story.is_validated = False
+        story.status = 'generated'
+        db.session.commit()
+
+        # Final validation to get remaining errors
+        _, final_errors = validation_service.validate(domain, problem)
+
+        return jsonify({
+            'success': False,
+            'already_valid': False,
+            'iterations': iterations,
+            'final_errors': final_errors,
+            'story': story.to_dict(),
+            'history': history
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': f'Auto-fix failed: {str(e)}'}), 500
 
 
 @bp.route('/stories/<int:story_id>', methods=['DELETE'])
