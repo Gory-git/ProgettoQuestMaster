@@ -109,10 +109,18 @@ def validate_pddl(story_id):
             story.is_validated = True
             story.status = 'validated'
             db.session.commit()
+
+            # Report plan existence (uses Fast Downward if available, else trusts BFS inside validate())
+            plan_exists, plan_message = validation_service.check_plan_exists(
+                story.pddl_domain,
+                story.pddl_problem
+            )
             
             return jsonify({
                 'valid': True,
                 'message': 'PDDL is valid',
+                'plan_exists': plan_exists,
+                'plan_message': plan_message,
                 'story': story.to_dict()
             }), 200
         else:

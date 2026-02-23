@@ -260,14 +260,21 @@ def take_action(session_id):
         session.action_history = json.dumps(action_history)
         
         # Generate narrative for the new state
-        state_description = f"Step {result['step']}: Action taken - {action_name}"
+        current_facts = result['state'].get('facts', [])
+        state_description = (
+            f"Step {result['step']}: {'; '.join(current_facts[:10])}"
+            if current_facts
+            else f"Step {result['step']}: Action taken - {action_name}"
+        )
         available_action_names = [a['display_text'] for a in result['available_actions'][:5]]
         
         narrative = narrative_service.generate_narrative(
             story.lore_content,
             state_description,
             action_name,
-            available_action_names
+            available_action_names,
+            current_facts=current_facts,
+            action_history=[h['action'] for h in result['state'].get('action_history', [])[-5:]]
         )
         
         # Narrativize available action choices
@@ -313,7 +320,8 @@ def take_action(session_id):
             'image_url': image_url,
             'available_actions': result['available_actions'],
             'is_completed': is_completed,
-            'goal_reached': is_completed
+            'goal_reached': is_completed,
+            'dead_end': result.get('dead_end', False)
         }), 200
         
     except ValueError as e:

@@ -7,10 +7,7 @@ import os
 from openai import OpenAI
 from typing import Dict, List, Optional
 import re
-from .game_service import humanize_pddl_action, FALLBACK_ACTION_NAME
-
-# Pre-crafted narrative choice presented to the player when a dead-end is detected
-_FALLBACK_NARRATIVE_CHOICE = "In a moment of desperation, you rethink your strategy."
+from .game_service import humanize_pddl_action
 
 
 class NarrativeService:
@@ -31,7 +28,9 @@ class NarrativeService:
     
     def generate_narrative(self, lore: str, current_state: str, 
                           action_taken: Optional[str], 
-                          available_actions: List[str]) -> str:
+                          available_actions: List[str],
+                          current_facts: Optional[List[str]] = None,
+                          action_history: Optional[List[str]] = None) -> str:
         """
         Generate narrative text for current game state
         
@@ -40,12 +39,17 @@ class NarrativeService:
             current_state: Current PDDL state description
             action_taken: Action that was just taken (None for initial state)
             available_actions: List of actions currently available
+            current_facts: Optional list of current PDDL facts for richer context
+            action_history: Optional list of recent action names for story continuity
             
         Returns:
             Generated narrative text
         """
         
-        prompt = self._create_narrative_prompt(lore, current_state, action_taken, available_actions)
+        prompt = self._create_narrative_prompt(
+            lore, current_state, action_taken, available_actions,
+            current_facts=current_facts, action_history=action_history
+        )
         
         try:
             response = self.client.chat.completions.create(
@@ -68,7 +72,9 @@ class NarrativeService:
             return f"[Narrative generation error: {str(e)}]"
     
     def _create_narrative_prompt(self, lore: str, state: str, 
-                                 action: Optional[str], actions: List[str]) -> str:
+                                 action: Optional[str], actions: List[str],
+                                 current_facts: Optional[List[str]] = None,
+                                 action_history: Optional[List[str]] = None) -> str:
         """Create prompt for narrative generation"""
         
         if action:
@@ -77,6 +83,14 @@ class NarrativeService:
             action_text = "\n\nThis is the beginning of the story."
         
         actions_text = '\n'.join(f"- {a}" for a in actions)
+
+        facts_section = ""
+        if current_facts:
+            facts_section = f"\n\nCURRENT STATE FACTS:\n{'; '.join(current_facts[:15])}"
+
+        history_section = ""
+        if action_history:
+            history_section = f"\n\nRECENT STORY PATH:\n{' → '.join(action_history[-5:])}"
         
         return f"""Generate engaging narrative text for this interactive story.
 
@@ -84,7 +98,7 @@ STORY CONTEXT:
 {lore[:500]}
 
 CURRENT SITUATION:
-{state}{action_text}
+{state}{action_text}{facts_section}{history_section}
 
 AVAILABLE CHOICES (don't list these - they'll be shown separately):
 {actions_text}
@@ -172,25 +186,6 @@ Fantasy art style, high quality, professional illustration."""
         if not available_actions:
             return []
 
-        # Detect fallback actions and provide pre-crafted dramatic narratives without
-        # an unnecessary LLM call.  In practice the fallback is the sole action in the
-        # list (dead-end recovery), but we handle mixed lists for robustness.
-        fallback_indices = {i for i, a in enumerate(available_actions)
-                            if a == FALLBACK_ACTION_NAME}
-        if fallback_indices:
-            non_fallback = [a for i, a in enumerate(available_actions)
-                            if i not in fallback_indices]
-            if not non_fallback:
-                return [_FALLBACK_NARRATIVE_CHOICE] * len(available_actions)
-            # Recursively narrativize only the non-fallback subset
-            narrativized_non_fallback = self.narrativize_choices(
-                lore, current_narrative, non_fallback)
-            nf_iter = iter(narrativized_non_fallback)
-            return [
-                _FALLBACK_NARRATIVE_CHOICE if i in fallback_indices else next(nf_iter)
-                for i in range(len(available_actions))
-            ]
-
         prompt = self._create_narrativize_prompt(lore, current_narrative, available_actions)
 
         try:
@@ -242,13 +237,14 @@ Fantasy art style, high quality, professional illustration."""
 STORY LORE:
 {lore[:500]}
 
-CURRENT NARRATIVE:
+CURRENT NARRATIVE (this is where the player currently is in the story):
 {current_narrative[:300]}
 
 ACTIONS TO TRANSFORM (in order):
 {actions_list}
 
-For each action, write a short, immersive narrative choice (5-10 words) that fits the story context.
+For each action, write a short, immersive narrative choice (5-10 words) that fits the CURRENT story moment.
+The choices must feel different from each other and reflect the specific situation described above.
 Return EXACTLY {len(actions)} lines, one narrative choice per line, in the same order.
 Do not include numbers, bullets, or extra formatting - just the choice text.
 """

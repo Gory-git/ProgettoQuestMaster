@@ -123,6 +123,7 @@ REQUIREMENTS:
 7. Ensure actions are logically consistent
 8. Ensure the domain is highly connected. Every reachable state (except the goal) must have at least {bf_min} applicable actions. Avoid dead ends by providing 'backtrack' actions or alternative routes for every major decision.
 9. Never delete a predicate that is the sole enabler of all remaining story progress without providing an alternative route or action to re-establish it.
+10. CRITICAL: Avoid creating actions that can undo each other in cycles (A enables B, B undoes A, A enables B...) unless there is a clear path to the goal that breaks the cycle.
 
 Output ONLY the PDDL domain file content, starting with (define (domain .. .) and ending with the final closing parenthesis.  Do NOT include any explanation or comments before or after the PDDL code. 
 """
@@ -153,6 +154,7 @@ REQUIREMENTS:
 4. Ensure consistency with the domain file
 5. Ensure all parentheses are balanced and valid
 6. Reference the correct domain name with (: domain <name>)
+7. CRITICAL: The initial state and goal MUST be reachable from each other through the defined actions. Verify mentally that there exists at least one sequence of actions leading from the initial state to the goal.
 
 Output ONLY the PDDL problem file content, starting with (define (problem ...) and ending with the final closing parenthesis. Do NOT include any explanation or comments before or after the PDDL code.
 """
