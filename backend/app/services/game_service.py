@@ -6,9 +6,6 @@ Handles PDDL parsing, state tracking, action calculation, and game orchestration
 import re
 from typing import Dict, List, Set, Tuple, Optional, Any
 
-# Identifier for the synthetic fallback action injected when no PDDL actions are applicable
-FALLBACK_ACTION_NAME = 'panic_and_search'
-
 
 def humanize_pddl_action(action: str) -> str:
     """
@@ -422,6 +419,31 @@ class ActionCalculator:
                     })
         
         return applicable
+
+    def _simulate_action_effect(self, action_def: Dict[str, Any], bindings: Dict[str, str],
+                                current_state: Set[str]) -> frozenset:
+        """
+        Simulate the effect of an action without modifying the real state.
+
+        Args:
+            action_def: Action definition with 'effect' key
+            bindings: Variable to object mappings
+            current_state: Current set of facts
+
+        Returns:
+            frozenset of facts resulting from the action
+        """
+        new_state = set(current_state)
+
+        for pred in action_def['effect']['add']:
+            grounded = StateEvaluator._ground_predicate(pred, bindings)
+            new_state.add(grounded)
+
+        for pred in action_def['effect']['delete']:
+            grounded = StateEvaluator._ground_predicate(pred, bindings)
+            new_state.discard(grounded)
+
+        return frozenset(new_state)
     
     def _generate_bindings(self, parameters: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """
@@ -481,6 +503,8 @@ class GameState:
         self.goal = goal
         self.step_count = 0
         self.action_history = []
+        self.visited_states: Set[frozenset] = set()
+        self.visited_states.add(frozenset(self.current_facts))
     
     def apply_action(self, action_def: Dict[str, Any], bindings: Dict[str, str]):
         """Apply action effects to update state"""
@@ -496,6 +520,9 @@ class GameState:
             grounded = StateEvaluator._ground_predicate(pred, bindings)
             self.current_facts.discard(grounded)
         
+        # Record the new state
+        self.visited_states.add(frozenset(self.current_facts))
+
         # Update history
         self.step_count += 1
         self.action_history.append({
@@ -523,7 +550,8 @@ class GameState:
         return {
             'facts': list(self.current_facts),
             'step_count': self.step_count,
-            'action_history': self.action_history
+            'action_history': self.action_history,
+            'visited_states': [list(s) for s in self.visited_states]
         }
     
     @classmethod
@@ -532,6 +560,11 @@ class GameState:
         state = cls(set(data.get('facts', [])), goal)
         state.step_count = data.get('step_count', 0)
         state.action_history = data.get('action_history', [])
+        # Restore visited_states from serialized data if present; otherwise keep the
+        # single entry added by __init__ (current facts) as the starting point.
+        raw_visited = data.get('visited_states', [])
+        if raw_visited:
+            state.visited_states = {frozenset(s) for s in raw_visited}
         return state
 
 
@@ -553,35 +586,45 @@ class GameEngine:
         }
     
     def get_available_actions(self) -> List[Dict[str, Any]]:
-        """Get all actions available in current state"""
+        """Get all actions available in current state, annotated with revisit info"""
         applicable = self.calculator.get_applicable_actions(self.game_state.current_facts)
 
-        # Inject a fallback action when no actions are applicable and the goal is not yet reached
-        if not applicable and not self.game_state.is_goal_reached():
-            return [{
-                'id': '__fallback__',
-                'action': FALLBACK_ACTION_NAME,
-                'bindings': {},
-                'display_text': 'Search for another way',
-                'description': FALLBACK_ACTION_NAME
-            }]
-        
-        # Format for display
-        formatted_actions = []
+        if not applicable:
+            return []
+
+        # Format for display, annotating each action with whether it revisits a known state
+        new_actions = []
+        revisit_actions = []
+
         for action in applicable:
-            # action['description'] is in format: "action_name (param1, param2, param3)"
-            # We use this as display_text after humanizing
-            display_text = humanize_pddl_action(action['description'])
-            
-            formatted_actions.append({
+            action_def = self.parser.actions.get(action['action'])
+            try:
+                simulated = (
+                    self.calculator._simulate_action_effect(
+                        action_def, action['bindings'], self.game_state.current_facts
+                    )
+                    if action_def else frozenset(self.game_state.current_facts)
+                )
+            except (KeyError, Exception):
+                simulated = frozenset(self.game_state.current_facts)
+            revisits = simulated in self.game_state.visited_states
+
+            formatted = {
                 'id': f"{action['action']}_{hash(str(action['bindings']))}",
                 'action': action['action'],
                 'bindings': action['bindings'],
-                'display_text': display_text,
-                'description': self._get_action_narrative(action['action'], action['bindings'])
-            })
-        
-        return formatted_actions
+                'display_text': humanize_pddl_action(action['description']),
+                'description': self._get_action_narrative(action['action'], action['bindings']),
+                'revisits_state': revisits
+            }
+
+            if revisits:
+                revisit_actions.append(formatted)
+            else:
+                new_actions.append(formatted)
+
+        # Prefer actions that lead to new states; fall back to revisiting ones if needed
+        return new_actions + revisit_actions
     
     def execute_action(self, action_name: str, bindings: Dict[str, str]) -> Dict[str, Any]:
         """
@@ -594,22 +637,6 @@ class GameEngine:
         Returns:
             Dict with updated state and whether goal is reached
         """
-        # Handle the synthetic fallback action by resetting to initial state
-        if action_name == FALLBACK_ACTION_NAME:
-            self.game_state.current_facts = self.parser.initial_state.copy()
-            self.game_state.step_count += 1
-            self.game_state.action_history.append({
-                'step': self.game_state.step_count,
-                'action': FALLBACK_ACTION_NAME,
-                'bindings': {}
-            })
-            return {
-                'step': self.game_state.step_count,
-                'state': self.game_state.to_dict(),
-                'goal_reached': False,
-                'available_actions': self.get_available_actions()
-            }
-
         # Get action definition
         action_def = self.parser.actions.get(action_name)
         if not action_def:
@@ -628,13 +655,19 @@ class GameEngine:
         
         # Check goal
         goal_reached = self.game_state.is_goal_reached()
-        
-        return {
+        available_actions = [] if goal_reached else self.get_available_actions()
+
+        result = {
             'step': self.game_state.step_count,
             'state': self.game_state.to_dict(),
             'goal_reached': goal_reached,
-            'available_actions': [] if goal_reached else self.get_available_actions()
+            'available_actions': available_actions
         }
+
+        if not goal_reached and not available_actions:
+            result['dead_end'] = True
+
+        return result
     
     def is_goal_reached(self) -> bool:
         """Check if goal state has been reached"""

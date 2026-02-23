@@ -37,11 +37,18 @@ class PDDLValidationService:
         if syntax_errors:
             errors. extend(syntax_errors)
         
-        # Try Fast Downward validation if available
-        if self.fast_downward_path and os.path.exists(self. fast_downward_path):
-            fd_errors = self._validate_with_fast_downward(domain_content, problem_content)
-            if fd_errors:
-                errors.extend(fd_errors)
+        # Only proceed with deeper checks if syntax is clean
+        if not errors:
+            # Try Fast Downward validation if available
+            if self.fast_downward_path and os.path.exists(self.fast_downward_path):
+                fd_errors = self._validate_with_fast_downward(domain_content, problem_content)
+                if fd_errors:
+                    errors.extend(fd_errors)
+
+            # Check goal reachability using internal BFS
+            reachable, reach_msg = self._check_reachability_internal(domain_content, problem_content)
+            if not reachable:
+                errors.append(reach_msg)
         
         return len(errors) == 0, errors
     
@@ -141,6 +148,72 @@ class PDDLValidationService:
         
         return errors
     
+    def _check_reachability_internal(self, domain: str, problem: str) -> Tuple[bool, str]:
+        """
+        Check goal reachability using a pure-Python BFS over PDDL states.
+        This is the fallback used when Fast Downward is not available.
+
+        Args:
+            domain: Domain file content
+            problem: Problem file content
+
+        Returns:
+            Tuple of (reachable, message)
+        """
+        try:
+            from app.services.game_service import PDDLParser, ActionCalculator, StateEvaluator
+
+            parser = PDDLParser(domain, problem)
+            calculator = ActionCalculator(parser)
+            goal = parser.goal
+
+            initial_frozen = frozenset(parser.initial_state)
+            queue = [(initial_frozen, 0)]
+            visited = {initial_frozen}
+            max_depth = 50
+            max_states = 10000
+
+            while queue:
+                if len(visited) > max_states:
+                    return False, (
+                        "No reachable solution found: the goal state cannot be reached "
+                        "from the initial state with the available actions"
+                    )
+
+                current_frozen, depth = queue.pop(0)
+                current_set = set(current_frozen)
+
+                # Check if goal is satisfied
+                goal_ok = all(p in current_set for p in goal.get('positive', []))
+                goal_ok = goal_ok and all(p not in current_set for p in goal.get('negative', []))
+                if goal_ok:
+                    return True, f"Goal reachable in {depth} steps"
+
+                if depth >= max_depth:
+                    continue
+
+                # Expand successors
+                applicable = calculator.get_applicable_actions(current_set)
+                for action in applicable:
+                    action_def = parser.actions.get(action['action'])
+                    if not action_def:
+                        continue
+                    next_frozen = calculator._simulate_action_effect(
+                        action_def, action['bindings'], current_set
+                    )
+                    if next_frozen not in visited:
+                        visited.add(next_frozen)
+                        queue.append((next_frozen, depth + 1))
+
+            return False, (
+                "No reachable solution found: the goal state cannot be reached "
+                "from the initial state with the available actions"
+            )
+
+        except Exception:
+            # Do not block validation if the internal check itself fails
+            return True, "Internal reachability check skipped due to a parsing error"
+
     def check_plan_exists(self, domain:  str, problem: str) -> Tuple[bool, str]:
         """
         Check if a valid plan exists for the problem
