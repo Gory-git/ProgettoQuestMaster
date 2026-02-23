@@ -6,6 +6,9 @@ Handles PDDL parsing, state tracking, action calculation, and game orchestration
 import re
 from typing import Dict, List, Set, Tuple, Optional, Any
 
+# Identifier for the synthetic fallback action injected when no PDDL actions are applicable
+FALLBACK_ACTION_NAME = 'panic_and_search'
+
 
 def humanize_pddl_action(action: str) -> str:
     """
@@ -552,6 +555,16 @@ class GameEngine:
     def get_available_actions(self) -> List[Dict[str, Any]]:
         """Get all actions available in current state"""
         applicable = self.calculator.get_applicable_actions(self.game_state.current_facts)
+
+        # Inject a fallback action when no actions are applicable and the goal is not yet reached
+        if not applicable and not self.game_state.is_goal_reached():
+            return [{
+                'id': '__fallback__',
+                'action': FALLBACK_ACTION_NAME,
+                'bindings': {},
+                'display_text': 'Search for another way',
+                'description': FALLBACK_ACTION_NAME
+            }]
         
         # Format for display
         formatted_actions = []
@@ -581,6 +594,22 @@ class GameEngine:
         Returns:
             Dict with updated state and whether goal is reached
         """
+        # Handle the synthetic fallback action by resetting to initial state
+        if action_name == FALLBACK_ACTION_NAME:
+            self.game_state.current_facts = self.parser.initial_state.copy()
+            self.game_state.step_count += 1
+            self.game_state.action_history.append({
+                'step': self.game_state.step_count,
+                'action': FALLBACK_ACTION_NAME,
+                'bindings': {}
+            })
+            return {
+                'step': self.game_state.step_count,
+                'state': self.game_state.to_dict(),
+                'goal_reached': False,
+                'available_actions': self.get_available_actions()
+            }
+
         # Get action definition
         action_def = self.parser.actions.get(action_name)
         if not action_def:
