@@ -332,12 +332,35 @@ def take_action(session_id):
         
         # Check for goal completion
         is_completed = result['goal_reached']
-        
+
+        quest_summary = None
         if is_completed:
             session.is_completed = True
             session.completed_at = datetime.utcnow()
-            narrative += "\n\n🎉 Congratulations! You have completed the quest!"
-        
+
+            # Build humanized action summary lines
+            full_action_history = json.loads(session.action_history) if session.action_history else []
+            full_narrative_history = json.loads(session.narrative_history) if session.narrative_history else []
+            action_summary_lines = []
+            for entry in full_action_history:
+                action_nm = entry.get('action', '')
+                binds = entry.get('bindings', {})
+                step_n = entry.get('step', '?')
+                humanized = humanize_pddl_action(
+                    # Format: "action_name (param1, param2)" — matches humanize_pddl_action's expected input
+                    f"{action_nm} ({', '.join(binds.values())})" if binds else action_nm
+                )
+                action_summary_lines.append(f"Step {step_n}: {humanized}")
+
+            quest_summary = narrative_service.generate_quest_summary(
+                lore=story.lore_content,
+                story_title=story.title,
+                narrative_history=full_narrative_history,
+                action_summary_lines=action_summary_lines,
+                steps_taken=result['step']
+            )
+            narrative = quest_summary
+
         # Update timestamp
         session.last_action_at = datetime.utcnow()
         
@@ -350,7 +373,8 @@ def take_action(session_id):
             'available_actions': result['available_actions'],
             'is_completed': is_completed,
             'goal_reached': is_completed,
-            'dead_end': result.get('dead_end', False)
+            'dead_end': result.get('dead_end', False),
+            'quest_summary': quest_summary,
         }), 200
         
     except ValueError as e:
