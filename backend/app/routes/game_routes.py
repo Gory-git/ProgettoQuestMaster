@@ -37,7 +37,7 @@ def _get_or_create_engine(session: GameSession, story: Story) -> GameEngine:
             if session.current_state:
                 state_data = json.loads(session.current_state)
                 if 'facts' in state_data:
-                    engine.game_state = GameState.from_dict(state_data, engine.parser.goal)
+                    engine.game_state = GameState.from_dict(state_data, engine.parser.goal, objects=engine.parser.objects)
             
             _active_engines[session_key] = engine
         except Exception as e:

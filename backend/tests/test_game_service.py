@@ -243,6 +243,51 @@ def test_full_game_flow():
         return False
 
 
+def test_goal_with_variables():
+    """Test that is_goal_reached works when goal contains PDDL variables"""
+    print("\n🎯 Testing Goal with Variables...")
+
+    domain = """
+(define (domain test)
+  (:requirements :strips :typing)
+  (:types character item)
+  (:predicates
+    (has ?c - character ?i - item)
+  )
+  (:action pickup
+    :parameters (?c - character ?i - item)
+    :precondition (and)
+    :effect (has ?c ?i)
+  )
+)
+"""
+    problem = """
+(define (problem test-problem)
+  (:domain test)
+  (:objects
+    hero - character
+    sword - item
+  )
+  (:init)
+  (:goal (has ?c ?i))
+)
+"""
+    engine = GameEngine(domain, problem)
+
+    # Initially goal not reached
+    assert not engine.is_goal_reached(), "Goal should not be reached initially"
+    print("  ✅ Goal correctly not reached at start")
+
+    # Execute pickup action
+    engine.execute_action('pickup', {'c': 'hero', 'i': 'sword'})
+
+    # Now goal should be reached
+    assert engine.is_goal_reached(), "Goal should be reached after pickup"
+    print("  ✅ Goal with variables detected correctly after action")
+
+    return True
+
+
 if __name__ == '__main__':
     print("\n" + "=" * 60)
     print("🧪 Running Game Service Tests")
@@ -254,7 +299,8 @@ if __name__ == '__main__':
         test_action_calculator,
         test_game_state,
         test_game_engine,
-        test_full_game_flow
+        test_full_game_flow,
+        test_goal_with_variables
     ]
     
     results = []
