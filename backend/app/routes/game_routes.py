@@ -207,7 +207,11 @@ def get_game_session(session_id):
     try:
         # Get or create engine
         engine = _get_or_create_engine(session, story)
-        
+
+        # Sanity check: current_facts should NOT equal initial_state after step > 0
+        if engine.game_state.step_count > 0:
+            print(f"[DEBUG] Session {session_id} step={engine.game_state.step_count}, facts={len(engine.game_state.current_facts)}")
+
         # Get available actions (respect story branching factor)
         available_actions = engine.get_available_actions(story.branching_factor_max) if not session.is_completed else []
 
@@ -256,6 +260,10 @@ def take_action(session_id):
         # Get or create engine
         engine = _get_or_create_engine(session, story)
         
+        # Sanity check: current_facts should NOT equal initial_state after step > 0
+        if engine.game_state.step_count > 0:
+            print(f"[DEBUG] Session {session_id} step={engine.game_state.step_count}, facts={len(engine.game_state.current_facts)}")
+
         # Save previous facts for delta computation
         previous_facts = set(engine.game_state.current_facts)
 
