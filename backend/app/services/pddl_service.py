@@ -88,7 +88,7 @@ class PDDLGenerationService:
         """
         
         # Generate PDDL domain
-        domain_prompt = self._create_domain_prompt(lore_content, branching_factor_min, branching_factor_max)
+        domain_prompt = self._create_domain_prompt(lore_content, branching_factor_min, branching_factor_max, depth_min, depth_max)
         domain_content = self._call_openai(domain_prompt)
         domain_content = self._clean_pddl(domain_content)
         
@@ -99,7 +99,8 @@ class PDDLGenerationService:
         
         return domain_content, problem_content
     
-    def _create_domain_prompt(self, lore:  str, bf_min: int, bf_max: int) -> str:
+    def _create_domain_prompt(self, lore:  str, bf_min: int, bf_max: int,
+                              depth_min: int = None, depth_max: int = None) -> str:
         """Create prompt for domain generation"""
         return f"""You are an expert in PDDL (Planning Domain Definition Language) and interactive storytelling. 
 
@@ -123,11 +124,15 @@ REQUIREMENTS:
 7. Ensure actions are logically consistent
 8. Ensure the domain is highly connected. Every reachable state (except the goal) must have at least {bf_min} applicable actions. Avoid dead ends by providing 'backtrack' actions or alternative routes for every major decision.
 9. Never delete a predicate that is the sole enabler of all remaining story progress without providing an alternative route or action to re-establish it.
-10. CRITICAL: Avoid action cycles where two or more actions undo each other indefinitely without a way to reach the goal.
+10. CRITICAL ANTI-LOOP REQUIREMENT: Each action must make IRREVERSIBLE progress toward the goal.
+    Specifically: if action A sets predicate P, no other action should unset P unless P is not
+    required for goal progression. Design the action graph as a DAG (directed acyclic graph)
+    where each state is visited at most once on the optimal path.
     - Identify every pair of actions where action A adds predicate P and action B deletes predicate P (or vice versa). If applying A then B (or B then A) returns the world to the same state, that is a cycle A↔B.
     - Every such cycle MUST have a concrete exit condition: at least one action in the cycle must also add a one-way "story-progress" predicate (e.g., `clue-discovered`, `door-unlocked-permanently`) that is NEVER deleted by any action, so that the cycle is only possible before that predicate is established and the story can always advance toward the goal.
     - Example of a BAD cycle: `open_door` adds `(door-open)`, `close_door` deletes `(door-open)` - if `open_door` requires `(not (door-open))` and `close_door` requires `(door-open)`, the player can toggle forever with no progress.
     - Example of the FIX: make `open_door` also add `(door-was-opened)` (never deleted), and let the next story step require `(door-was-opened)` rather than `(door-open)`, so progress is irreversible.
+11. TEST YOUR DESIGN: mentally trace a path from the initial state to the goal. If you cannot find a path of {f"{depth_min}-{depth_max}" if depth_min is not None and depth_max is not None else "the expected number of"} steps, redesign the domain.
 
 Output ONLY the PDDL domain file content, starting with (define (domain .. .) and ending with the final closing parenthesis.  Do NOT include any explanation or comments before or after the PDDL code. 
 """
@@ -159,6 +164,8 @@ REQUIREMENTS:
 5. Ensure all parentheses are balanced and valid
 6. Reference the correct domain name with (: domain <name>)
 7. CRITICAL: The initial state and goal MUST be reachable from each other through the defined actions. Verify mentally that there exists at least one sequence of actions leading from the initial state to the goal.
+8. REACHABILITY TEST: Before finalizing, mentally simulate: starting from :init, apply actions one by one, and verify you can reach :goal within {depth_max} steps. If you cannot, modify :init or :goal until reachability is confirmed.
+9. AVOID SYMMETRIC REVERSALS: Do not define :init and :goal as mirror images that can only be reached by reversing all actions (this creates trivial cycles).
 
 Output ONLY the PDDL problem file content, starting with (define (problem ...) and ending with the final closing parenthesis. Do NOT include any explanation or comments before or after the PDDL code.
 """

@@ -6,6 +6,7 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import Story, GameSession
 from app.services import NarrativeService, GameEngine, GameState
+from app.services.game_service import humanize_pddl_action
 import json
 import uuid
 from datetime import datetime
@@ -60,8 +61,8 @@ def start_game(story_id):
         # Create game engine
         engine = GameEngine(story.pddl_domain, story.pddl_problem)
         
-        # Get initial game state
-        initial_data = engine.initialize_game()
+        # Get initial game state (respect story branching factor)
+        initial_data = engine.initialize_game(max_actions=story.branching_factor_max)
         
         return jsonify({
             'story_id': story_id,
@@ -84,7 +85,7 @@ def get_available_actions_for_story(story_id):
     try:
         # Create temporary engine
         engine = GameEngine(story.pddl_domain, story.pddl_problem)
-        actions = engine.get_available_actions()
+        actions = engine.get_available_actions(story.branching_factor_max)
         
         return jsonify({
             'available_actions': actions,
@@ -136,8 +137,8 @@ def create_game_session():
         # Create game engine
         engine = GameEngine(story.pddl_domain, story.pddl_problem)
         
-        # Initialize game
-        game_data = engine.initialize_game()
+        # Initialize game (respect story branching factor)
+        game_data = engine.initialize_game(max_actions=story.branching_factor_max)
         
         # Create session
         session = GameSession(
@@ -207,8 +208,20 @@ def get_game_session(session_id):
         # Get or create engine
         engine = _get_or_create_engine(session, story)
         
-        # Get available actions
-        available_actions = engine.get_available_actions() if not session.is_completed else []
+        # Get available actions (respect story branching factor)
+        available_actions = engine.get_available_actions(story.branching_factor_max) if not session.is_completed else []
+
+        # Narrativize choices using the last narrative from history
+        if available_actions:
+            narrative_history = json.loads(session.narrative_history) if session.narrative_history else []
+            last_narrative = narrative_history[-1]['narrative'] if narrative_history else 'You begin your adventure'
+            narrativized = narrative_service.narrativize_choices(
+                story.lore_content,
+                last_narrative,
+                [a['description'] for a in available_actions]
+            )
+            for i, action in enumerate(available_actions):
+                action['display_text'] = narrativized[i]
         
         return jsonify({
             'session': session.to_dict(),
@@ -243,8 +256,11 @@ def take_action(session_id):
         # Get or create engine
         engine = _get_or_create_engine(session, story)
         
-        # Execute action in game engine
-        result = engine.execute_action(action_name, bindings)
+        # Save previous facts for delta computation
+        previous_facts = set(engine.game_state.current_facts)
+
+        # Execute action in game engine (respect story branching factor)
+        result = engine.execute_action(action_name, bindings, max_actions=story.branching_factor_max)
         
         # Update session
         session.steps_taken = result['step']
@@ -259,12 +275,17 @@ def take_action(session_id):
         })
         session.action_history = json.dumps(action_history)
         
-        # Generate narrative for the new state
-        current_facts = result['state'].get('facts', [])
+        # Compute fact delta for richer narrative context
+        result_facts = set(result['state'].get('facts', []))
+        added_facts = result_facts - previous_facts
+        removed_facts = previous_facts - result_facts
+        humanized_action = humanize_pddl_action(
+            f"{action_name} ({', '.join(bindings.values())})" if bindings else action_name
+        )
         state_description = (
-            f"Step {result['step']}: {'; '.join(current_facts[:10])}"
-            if current_facts
-            else f"Step {result['step']}: Action taken - {action_name}"
+            f"Step {result['step']}: You performed '{humanized_action}'. "
+            f"New facts: {', '.join(list(added_facts)[:10]) if added_facts else 'none'}. "
+            f"No longer true: {', '.join(list(removed_facts)[:10]) if removed_facts else 'none'}."
         )
         available_action_names = [a['display_text'] for a in result['available_actions'][:5]]
         
@@ -273,7 +294,7 @@ def take_action(session_id):
             state_description,
             action_name,
             available_action_names,
-            current_facts=current_facts,
+            current_facts=list(result_facts),
             action_history=[h['action'] for h in result['state'].get('action_history', [])[-5:]]
         )
         

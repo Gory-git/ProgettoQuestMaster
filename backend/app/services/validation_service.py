@@ -46,7 +46,7 @@ class PDDLValidationService:
                     errors.extend(fd_errors)
 
             # Check goal reachability using internal BFS
-            reachable, reach_msg = self._check_reachability_internal(domain_content, problem_content)
+            reachable, reach_msg = self.check_reachability_bfs(domain_content, problem_content)
             if not reachable:
                 errors.append(reach_msg)
         
@@ -148,7 +148,7 @@ class PDDLValidationService:
         
         return errors
     
-    def _check_reachability_internal(self, domain: str, problem: str) -> Tuple[bool, str]:
+    def check_reachability_bfs(self, domain: str, problem: str) -> Tuple[bool, str]:
         """
         Check goal reachability using a pure-Python BFS over PDDL states.
         This is the fallback used when Fast Downward is not available.
@@ -205,8 +205,8 @@ class PDDLValidationService:
                         queue.append((next_frozen, depth + 1))
 
             return False, (
-                "No reachable solution found: the goal state cannot be reached "
-                "from the initial state with the available actions"
+                "Goal is not reachable from initial state via BFS (checked 50 steps). "
+                "The PDDL may contain loops or dead ends."
             )
 
         except Exception:
