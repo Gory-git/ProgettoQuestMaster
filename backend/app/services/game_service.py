@@ -560,11 +560,14 @@ class GameState:
         state = cls(set(data.get('facts', [])), goal)
         state.step_count = data.get('step_count', 0)
         state.action_history = data.get('action_history', [])
-        # Restore visited_states from serialized data if present; otherwise keep the
-        # single entry added by __init__ (current facts) as the starting point.
+        # Restore visited_states from serialized data if present; otherwise fall back
+        # to treating the current (restored) facts as the only visited state.
         raw_visited = data.get('visited_states', [])
         if raw_visited:
             state.visited_states = {frozenset(s) for s in raw_visited}
+        else:
+            # Fallback: at least the current state is marked as visited
+            state.visited_states = {frozenset(state.current_facts)}
         return state
 
 
