@@ -576,17 +576,22 @@ class GameEngine:
         self.calculator = ActionCalculator(self.parser)
         self.game_state = GameState(self.parser.initial_state, self.parser.goal)
     
-    def initialize_game(self) -> Dict[str, Any]:
+    def initialize_game(self, max_actions: Optional[int] = None) -> Dict[str, Any]:
         """Initialize a new game session"""
         return {
             'step': 0,
             'state': self.game_state.to_dict(),
             'goal_reached': False,
-            'available_actions': self.get_available_actions()
+            'available_actions': self.get_available_actions(max_actions)
         }
     
-    def get_available_actions(self) -> List[Dict[str, Any]]:
-        """Get all actions available in current state, annotated with revisit info"""
+    def get_available_actions(self, max_actions: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get all actions available in current state, annotated with revisit info.
+
+        Args:
+            max_actions: If set, limit the returned actions to this many, preferring
+                         actions that lead to new (unvisited) states.
+        """
         applicable = self.calculator.get_applicable_actions(self.game_state.current_facts)
 
         if not applicable:
@@ -624,9 +629,13 @@ class GameEngine:
                 new_actions.append(formatted)
 
         # Prefer actions that lead to new states; fall back to revisiting ones if needed
-        return new_actions + revisit_actions
+        all_actions = new_actions + revisit_actions
+        if max_actions is not None and len(all_actions) > max_actions:
+            all_actions = all_actions[:max_actions]
+        return all_actions
     
-    def execute_action(self, action_name: str, bindings: Dict[str, str]) -> Dict[str, Any]:
+    def execute_action(self, action_name: str, bindings: Dict[str, str],
+                       max_actions: Optional[int] = None) -> Dict[str, Any]:
         """
         Execute an action and update state
         
@@ -655,7 +664,7 @@ class GameEngine:
         
         # Check goal
         goal_reached = self.game_state.is_goal_reached()
-        available_actions = [] if goal_reached else self.get_available_actions()
+        available_actions = [] if goal_reached else self.get_available_actions(max_actions)
 
         result = {
             'step': self.game_state.step_count,
