@@ -4,6 +4,7 @@ Handles PDDL parsing, state tracking, action calculation, and game orchestration
 """
 
 import re
+from itertools import product
 from typing import Dict, List, Set, Tuple, Optional, Any
 
 
@@ -498,9 +499,10 @@ class ActionCalculator:
 class GameState:
     """Track and manage current game state"""
     
-    def __init__(self, initial_state: Set[str], goal: Dict[str, List[str]]):
+    def __init__(self, initial_state: Set[str], goal: Dict[str, List[str]], objects: Dict[str, str] = None):
         self.current_facts = initial_state.copy()
         self.goal = goal
+        self.objects = objects or {}
         self.step_count = 0
         self.action_history = []
         self.visited_states: Set[frozenset] = set()
@@ -532,18 +534,79 @@ class GameState:
         })
     
     def is_goal_reached(self) -> bool:
-        """Check if current state satisfies goal conditions"""
-        # Check positive goal conditions
+        """Check if current state satisfies goal conditions, handling PDDL variables."""
+        all_goal_preds = self.goal.get('positive', []) + self.goal.get('negative', [])
+
+        # Collect all unique variables across all goal predicates
+        variables = []
+        seen = set()
+        for pred in all_goal_preds:
+            for token in pred.split():
+                if token.startswith('?'):
+                    var = token[1:]  # strip leading '?'
+                    if var not in seen:
+                        seen.add(var)
+                        variables.append(var)
+
+        if not variables:
+            # No variables: direct fact comparison
+            for pred in self.goal.get('positive', []):
+                if pred not in self.current_facts:
+                    return False
+            for pred in self.goal.get('negative', []):
+                if pred in self.current_facts:
+                    return False
+            return True
+
+        # Has variables: try all possible groundings (existential satisfaction)
+        object_names = list(self.objects.keys())
+        if not object_names:
+            # No objects known; fall back to wildcard pattern matching
+            return self._goal_reached_pattern_match()
+
+        for combo in product(object_names, repeat=len(variables)):
+            bindings = dict(zip(variables, combo))
+
+            satisfied = True
+            for pred in self.goal.get('positive', []):
+                grounded = StateEvaluator._ground_predicate(pred, bindings)
+                if grounded not in self.current_facts:
+                    satisfied = False
+                    break
+
+            if not satisfied:
+                continue
+
+            for pred in self.goal.get('negative', []):
+                grounded = StateEvaluator._ground_predicate(pred, bindings)
+                if grounded in self.current_facts:
+                    satisfied = False
+                    break
+
+            if satisfied:
+                return True
+
+        return False
+
+    def _goal_reached_pattern_match(self) -> bool:
+        """Fallback: pattern match treating PDDL variables as wildcards."""
         for pred in self.goal.get('positive', []):
-            if pred not in self.current_facts:
+            if not self._pred_matches_any_fact(pred):
                 return False
-        
-        # Check negative goal conditions
         for pred in self.goal.get('negative', []):
-            if pred in self.current_facts:
+            if self._pred_matches_any_fact(pred):
                 return False
-        
         return True
+
+    def _pred_matches_any_fact(self, pred: str) -> bool:
+        """Return True if pred (possibly with ?variables) matches any fact."""
+        if '?' not in pred:
+            return pred in self.current_facts
+        pattern = '^' + re.sub(r'\?\w+', r'\\S+', pred) + '$'
+        for fact in self.current_facts:
+            if re.match(pattern, fact):
+                return True
+        return False
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert state to dictionary for storage"""
@@ -555,9 +618,9 @@ class GameState:
         }
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any], goal: Dict[str, List[str]]) -> 'GameState':
+    def from_dict(cls, data: Dict[str, Any], goal: Dict[str, List[str]], objects: Dict[str, str] = None) -> 'GameState':
         """Reconstruct state from dictionary"""
-        state = cls(set(data.get('facts', [])), goal)
+        state = cls(set(data.get('facts', [])), goal, objects=objects)
         state.step_count = data.get('step_count', 0)
         state.action_history = data.get('action_history', [])
         # Restore visited_states from serialized data if present; otherwise fall back
@@ -577,7 +640,7 @@ class GameEngine:
     def __init__(self, domain_content: str, problem_content: str):
         self.parser = PDDLParser(domain_content, problem_content)
         self.calculator = ActionCalculator(self.parser)
-        self.game_state = GameState(self.parser.initial_state, self.parser.goal)
+        self.game_state = GameState(self.parser.initial_state, self.parser.goal, objects=self.parser.objects)
     
     def initialize_game(self, max_actions: Optional[int] = None) -> Dict[str, Any]:
         """Initialize a new game session"""
